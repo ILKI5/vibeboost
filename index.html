@@ -6,7 +6,49 @@
 <title>VibeBoost</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
-:root{color-scheme:dark;--bg:#0a1020;--panel:#151e33;--line:#303c59;--text:#eef0ff;--muted:#a5afcb;--accent:#a18aff}*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top,#302151,var(--bg) 65%);background-attachment:fixed;color:var(--text);font:16px/1.5 system-ui,sans-serif;min-height:100vh}button,input{font:inherit}button{cursor:pointer}header{border-bottom:1px solid var(--line);background:#0a1020dd;padding:20px}.wrap{max-width:1000px;margin:auto;padding:24px 18px}.header{max-width:964px;margin:auto;display:flex;align-items:center;justify-content:space-between;gap:12px}.logo{background:none;border:0;color:#b8a6ff;font-size:28px;font-weight:800;padding:0}.muted{color:var(--muted);font-size:13px}h1{font-size:25px;margin:10px 0 20px}.tools{display:flex;gap:12px;align-items:center;margin-bottom:20px;flex-wrap:wrap}input{width:100%;background:#0c1426;color:var(--text);border:1px solid var(--line);border-radius:12px;padding:13px;min-width:0}input:focus{outline:2px solid var(--accent)}#search{flex:1;min-width:180px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}.card{display:flex;align-items:center;gap:14px;text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:20px;color:inherit;min-height:100px;min-width:0}.card:hover{border-color:var(--accent)}.card-info{flex:1;min-width:0}.title{display:block;font-weight:700;overflow-wrap:anywhere}.subtitle{display:block;color:var(--muted);font-size:13px;margin-top:5px}.icon{flex:0 0 48px;width:48px;height:48px;display:grid;place-items:center;border-radius:12px;background:#292642;color:#cfbdff;font-weight:bold}.icon img{display:block;width:48px;height:48px;object-fit:contain}.price{display:block;color:#c3afff;margin-top:8px;font-weight:700}.button{border:1px solid var(--line);border-radius:12px;padding:11px 16px;background:var(--panel);color:inherit}.primary{background:linear-gradient(110deg,#7857df,#a462df);border:0;font-weight:700;color:white}.button:disabled{opacity:.5;cursor:wait}.back{margin-bottom:16px}.empty{color:var(--muted);padding:20px}.overlay{position:fixed;inset:0;background:#030713dd;z-index:100;display:flex;align-items:center;justify-content:center;padding:16px}.modal{width:100%;max-width:560px;max-height:90vh;max-height:90dvh;overflow:auto;background:#121b2f;border:1px solid var(--line);border-radius:22px;padding:24px}.modal-head{display:flex;align-items:start;gap:12px;justify-content:space-between}.modal h2{font-size:22px;margin:0 0 15px}.close{font-size:24px;padding:0 10px}.desc{white-space:pre-wrap;overflow-wrap:anywhere;max-height:170px;overflow:auto;background:#0c1426;padding:12px;border-radius:12px;font-size:13px;color:var(--muted);margin:14px 0}label{display:block;margin:16px 0 6px}.total{display:flex;justify-content:space-between;gap:10px;background:#352753;border-radius:12px;padding:16px;margin:20px 0}#submit{width:100%}.diagnostics{margin-top:24px;border:1px solid var(--line);border-radius:12px;padding:12px}.diagnostics textarea{width:100%;height:200px;background:#080e1c;color:#c7d5ef;border:0;padding:10px;font:12px/1.5 monospace;resize:vertical}#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);max-width:92vw;width:max-content;padding:14px 20px;background:#302549;color:white;border:1px solid #705d99;border-radius:12px;z-index:200;white-space:pre-wrap}#formStatus{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;margin-top:14px} [hidden]{display:none!important}footer{color:var(--muted);font-size:12px;margin-top:30px}a{color:#c4b4ff}
+:root{color-scheme:dark;--bg:#0a1020;--panel:#151e33;--line:#303c59;--text:#eef0ff;--muted:#a5afcb;--accent:#a18aff}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(ellipse at top,#302151,var(--bg) 65%);background-attachment:fixed;color:var(--text);font:16px/1.5 system-ui,sans-serif;min-height:100vh}
+button,input{font:inherit}
+button{cursor:pointer}
+header{border-bottom:1px solid var(--line);background:#0a1020dd;padding:20px}
+.wrap{max-width:1000px;margin:auto;padding:24px 18px}
+.header{max-width:964px;margin:auto;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.logo{background:none;border:0;color:#b8a6ff;font-size:28px;font-weight:800;padding:0}
+.muted{color:var(--muted);font-size:13px}
+h1{font-size:25px;margin:10px 0 20px}
+.tools{display:flex;gap:12px;align-items:center;margin-bottom:20px;flex-wrap:wrap}
+input{width:100%;background:#0c1426;color:var(--text);border:1px solid var(--line);border-radius:12px;padding:13px;min-width:0}
+input:focus{outline:2px solid var(--accent)}
+#search{flex:1;min-width:180px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.card{display:flex;align-items:center;gap:14px;text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:20px;color:inherit;min-height:100px;min-width:0;transition:border-color .15s}
+.card:hover{border-color:var(--accent)}
+.card-info{flex:1;min-width:0}
+.title{display:block;font-weight:700;overflow-wrap:anywhere}
+.subtitle{display:block;color:var(--muted);font-size:13px;margin-top:5px}
+.icon{flex:0 0 48px;width:48px;height:48px;display:grid;place-items:center;border-radius:12px;background:#292642;color:#cfbdff;font-weight:bold}
+.icon img{display:block;width:48px;height:48px;object-fit:contain}
+.price{display:block;color:#c3afff;margin-top:8px;font-weight:700}
+.button{border:1px solid var(--line);border-radius:12px;padding:11px 16px;background:var(--panel);color:inherit}
+.primary{background:linear-gradient(110deg,#7857df,#a462df);border:0;font-weight:700;color:white}
+.button:disabled{opacity:.5;cursor:wait}
+.back{margin-bottom:16px}
+.empty{color:var(--muted);padding:20px}
+.overlay{position:fixed;inset:0;background:#030713dd;z-index:100;display:flex;align-items:center;justify-content:center;padding:16px}
+.modal{width:100%;max-width:560px;max-height:90vh;max-height:90dvh;overflow:auto;background:#121b2f;border:1px solid var(--line);border-radius:22px;padding:24px}
+.modal-head{display:flex;align-items:start;gap:12px;justify-content:space-between}
+.modal h2{font-size:22px;margin:0 0 15px}
+.close{font-size:24px;padding:0 10px}
+.desc{white-space:pre-wrap;overflow-wrap:anywhere;max-height:170px;overflow:auto;background:#0c1426;padding:12px;border-radius:12px;font-size:13px;color:var(--muted);margin:14px 0}
+label{display:block;margin:16px 0 6px}
+.total{display:flex;justify-content:space-between;gap:10px;background:#352753;border-radius:12px;padding:16px;margin:20px 0}
+#submit{width:100%}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);max-width:92vw;width:max-content;padding:14px 20px;background:#302549;color:white;border:1px solid #705d99;border-radius:12px;z-index:200;white-space:pre-wrap}
+#formStatus{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;margin-top:14px}
+[hidden]{display:none!important}
+footer{color:var(--muted);font-size:12px;margin-top:30px}
+a{color:#c4b4ff}
 </style>
 </head>
 <body>
@@ -22,13 +64,12 @@
 <div class="modal-head"><h2 id="modalTitle">Оформление заявки</h2><button class="button close" id="close" aria-label="Закрыть">×</button></div>
 <strong id="serviceName"></strong><div class="muted" id="serviceMeta"></div><div class="desc" id="description"></div>
 <p class="muted" id="special"></p>
-<form id="orderForm"><label for="link">Ссылка / username</label><input id="link" type="text" placeholder="https://… или @username" maxlength="700" required><label for="quantity">Количество <span class="muted" id="limits"></span></label><input id="quantity" type="number" step="1" required><div class="total"><span></span><strong id="total">—</strong></div><button class="button primary" id="submit" type="submit">Отправить заявку</button><div id="formStatus" role="status"></div></form>
+<form id="orderForm"><label for="link">Ссылка / username</label><input id="link" type="text" placeholder="https://… или @username" maxlength="700" required><label for="quantity">Количество <span class="muted" id="limits"></span></label><input id="quantity" type="number" step="1" required><div class="total"><span>Итого:</span><strong id="total">—</strong></div><button class="button primary" id="submit" type="submit">Отправить заявку</button><div id="formStatus" role="status"></div></form>
 </section></div>
 <div id="toast" hidden role="status"></div>
 <script>
 'use strict';
 const API_URL = 'https://vibeboost-2.onrender.com/api/order';
-// Эти имена должны совпадать с файлами рядом с index.html (включая регистр).
 const ICONS = {
   'Telegram':'telegram.svg','ВКонтакте':'vk.svg','Instagram':'instagram.svg',
   'TikTok':'tiktok.svg','YouTube':'youtube.svg','Twitter X':'twitter.png',
@@ -40,41 +81,249 @@ const tg = window.Telegram?.WebApp;
 let services=[], network=null, category=null, selected=null, sending=false, sent=false, lastFocus=null, toastTimer;
 const money = n => Number(n).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' ₽';
 const num = n => Number(n).toLocaleString('ru-RU');
-function log(message){$('debug').value += new Date().toISOString()+' '+message+'\n';$('debug').scrollTop=$('debug').scrollHeight;}
-function toast(message){$('toast').textContent=message;$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,7000);}
-function el(tag,text,cls){const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e;}
+
+function toast(message){
+  const t = $('toast');
+  t.textContent = message;
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.hidden = true, 5000);
+}
+
+function el(tag,text,cls){
+  const e = document.createElement(tag);
+  if(text!==undefined) e.textContent = text;
+  if(cls) e.className = cls;
+  return e;
+}
+
 function makeCard(title,subtitle,callback,iconNetwork,price){
- const card=el('button',undefined,'card');card.type='button';
- if(iconNetwork){const wrap=el('span',iconNetwork.slice(0,2).toUpperCase(),'icon');const filename=ICONS[iconNetwork];if(filename){const img=new Image();img.alt='';img.onload=()=>wrap.replaceChildren(img);img.onerror=()=>log('Иконка не загрузилась: '+filename);img.src='./'+filename;}card.append(wrap);}
- const info=el('span',undefined,'card-info');info.append(el('span',title,'title'),el('span',subtitle,'subtitle'));if(price)info.append(el('span',price,'price'));card.append(info,el('span','›'));card.onclick=callback;return card;
+  const card = el('button',undefined,'card');
+  card.type = 'button';
+  if(iconNetwork){
+    const wrap = el('span',iconNetwork.slice(0,2).toUpperCase(),'icon');
+    const filename = ICONS[iconNetwork];
+    if(filename){
+      const img = new Image();
+      img.alt = '';
+      img.onload = () => wrap.replaceChildren(img);
+      img.onerror = () => console.warn('Иконка не найдена:', filename);
+      img.src = './' + filename;
+    }
+    card.append(wrap);
+  }
+  const info = el('span',undefined,'card-info');
+  info.append(el('span',title,'title'), el('span',subtitle,'subtitle'));
+  if(price) info.append(el('span',price,'price'));
+  card.append(info, el('span','›'));
+  card.onclick = callback;
+  return card;
 }
+
 function render(){
- $('back').hidden=!network;$('heading').textContent=!network?'Выберите соцсеть':category||network+': категории';
- const query=$('search').value.trim().toLowerCase();const grid=$('grid');grid.replaceChildren();
- if(!network){const names=[...new Set(services.map(s=>s.network))].sort((a,b)=>a.localeCompare(b,'ru'));for(const name of names.filter(n=>n.toLowerCase().includes(query))){const count=services.filter(s=>s.network===name).length;grid.append(makeCard(name,`Услуг: ${count}`,()=>{network=name;category=null;$('search').value='';render();},name));}}
- else if(!category){const list=services.filter(s=>s.network===network);const cats=[...new Set(list.map(s=>s.category))].sort((a,b)=>a.localeCompare(b,'ru'));for(const name of cats.filter(n=>n.toLowerCase().includes(query))){grid.append(makeCard(name,`Услуг: ${list.filter(s=>s.category===name).length}`,()=>{category=name;$('search').value='';render();}));}}
- else{for(const s of services.filter(s=>s.network===network&&s.category===category&&(s.name+' '+s.service).toLowerCase().includes(query))){grid.append(makeCard(s.name,`ID ${s.service} · ${num(s.min)}–${num(s.max)} шт.`,()=>openOrder(s),null,money(s.rate)+' / 1000 шт.'));}}
- const count=grid.children.length;$('counter').textContent=`Показано: ${count}`;if(!count)grid.append(el('p','Ничего не найдено.','empty'));
+  $('back').hidden = !network;
+  $('heading').textContent = !network ? 'Выберите соцсеть' : (category || (network + ': категории'));
+  const query = $('search').value.trim().toLowerCase();
+  const grid = $('grid');
+  grid.replaceChildren();
+
+  if(!network){
+    const names = [...new Set(services.map(s => s.network))].sort((a,b) => a.localeCompare(b,'ru'));
+    for(const name of names.filter(n => n.toLowerCase().includes(query))){
+      const count = services.filter(s => s.network === name).length;
+      grid.append(makeCard(name, `Услуг: ${count}`, () => {
+        network = name;
+        category = null;
+        $('search').value = '';
+        render();
+      }, name));
+    }
+  } else if(!category){
+    const list = services.filter(s => s.network === network);
+    const cats = [...new Set(list.map(s => s.category))].sort((a,b) => a.localeCompare(b,'ru'));
+    for(const name of cats.filter(n => n.toLowerCase().includes(query))){
+      grid.append(makeCard(name, `Услуг: ${list.filter(s => s.category === name).length}`, () => {
+        category = name;
+        $('search').value = '';
+        render();
+      }));
+    }
+  } else {
+    for(const s of services.filter(s => s.network === network && s.category === category && (s.name + ' ' + s.service).toLowerCase().includes(query))){
+      grid.append(makeCard(s.name, `ID ${s.service} · ${num(s.min)}–${num(s.max)} шт.`, () => openOrder(s), null, money(s.rate) + ' / 1000 шт.'));
+    }
+  }
+  const count = grid.children.length;
+  $('counter').textContent = `Показано: ${count}`;
+  if(!count) grid.append(el('p','Ничего не найдено.','empty'));
 }
-function updatePrice(){if(!selected)return;const raw=$('quantity').value;const q=Number(raw);const valid=/^\d+$/.test(raw)&&Number.isSafeInteger(q)&&q>=Number(selected.min)&&q<=Number(selected.max);$('quantity').setCustomValidity(valid?'':`Введите целое число от ${selected.min} до ${selected.max}`);$('total').textContent=valid?money(Number(selected.rate)*q/1000):'—';}
-function openOrder(s){selected=s;sent=false;lastFocus=document.activeElement;$('serviceName').textContent=s.name;$('serviceMeta').textContent=s.network+' · '+s.category+' · ID '+s.service;$('description').textContent=s.description||'Описание не предоставлено.';$('special').textContent=s.type&&s.type!=='Default'?'Для этой услуги нужны дополнительные параметры. Администратор уточнит их перед подтверждением.':'Сумма предварительная; администратор подтвердит условия заявки.';$('link').value='';$('quantity').min=s.min;$('quantity').max=s.max;$('quantity').value=s.min;$('quantity').readOnly=Number(s.min)===Number(s.max);$('link').disabled=false;$('quantity').disabled=false;$('submit').disabled=false;$('submit').textContent='Отправить заявку';$('formStatus').textContent='';$('limits').textContent=`(${num(s.min)}–${num(s.max)})`;updatePrice();$('overlay').hidden=false;document.body.style.overflow='hidden';$('link').focus();}
-function closeOrder(){if(sending)return;$('overlay').hidden=true;document.body.style.overflow='';selected=null;lastFocus?.focus();}
-async function request(payload){const ctrl=new AbortController();const timer=setTimeout(()=>ctrl.abort(),90000);const start=Date.now();log('POST '+API_URL);try{const r=await fetch(API_URL,{method:'POST',credentials:'omit',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:ctrl.signal});const text=await r.text();log(`HTTP ${r.status}; ${Math.round((Date.now()-start)/1000)} сек.; ответ: ${text.slice(0,1500)}`);let data;try{data=JSON.parse(text);}catch{throw new Error(`HTTP ${r.status}: сервер вернул не JSON. Смотри диагностику.`);}return {response:r,data};}catch(e){log(e.name+': '+e.message);throw e;}finally{clearTimeout(timer);}}
-function explain(e){if(e.name==='AbortError')return 'Нет ответа за 90 секунд.';if(e.name==='TypeError')return 'Ответ недоступен (сеть или CORS). Смотри диагностику и логи Render.';return e.message||String(e);}
-$('orderForm').addEventListener('submit',async event=>{event.preventDefault();if(sending||sent||!selected)return;updatePrice();if(!$('orderForm').reportValidity())return;if(!$('link').value.trim()){toast('Укажи ссылку или username.');return;}if(!tg?.initData){$('formStatus').textContent='Открой Mini App через кнопку бота @VAgent007V_bot в Telegram.';return;}
- const s=selected;const quantity=Number($('quantity').value);const payload={initData:tg.initData,order:{service:s.service,name:s.name,network:s.network,category:s.category,link:$('link').value.trim(),quantity,total:(Number(s.rate)*quantity/1000).toFixed(2)}};
- sending=true;$('submit').disabled=true;$('link').disabled=true;$('quantity').disabled=true;$('submit').textContent='Отправка…';$('formStatus').textContent='Ждём ответ сервера. После простоя Render может запускаться до минуты.';
- try{const {response,data}=await request(payload);if(!response.ok||data.ok!==true)throw new Error(data.error||`HTTP ${response.status}`);sent=true;$('formStatus').textContent='✅ Заявка отправлена администратору.';toast('Заявка отправлена администратору');}
- catch(e){$('formStatus').textContent='❌ '+explain(e)+'\nПеред повторной отправкой проверь у администратора: заявка могла дойти, даже если ответ потерялся.';$('diagnostics').open=true;}
- finally{sending=false;$('submit').disabled=sent;$('submit').textContent=sent?'Заявка отправлена':'Повторить отправку';$('link').disabled=sent;$('quantity').disabled=sent;}
+
+function updatePrice(){
+  if(!selected) return;
+  const raw = $('quantity').value;
+  const q = Number(raw);
+  const valid = /^\d+$/.test(raw) && Number.isSafeInteger(q) && q >= Number(selected.min) && q <= Number(selected.max);
+  $('quantity').setCustomValidity(valid ? '' : `Введите целое число от ${selected.min} до ${selected.max}`);
+  $('total').textContent = valid ? money(Number(selected.rate) * q / 1000) : '—';
+}
+
+function openOrder(s){
+  selected = s;
+  sent = false;
+  lastFocus = document.activeElement;
+  $('serviceName').textContent = s.name;
+  $('serviceMeta').textContent = s.network + ' · ' + s.category + ' · ID ' + s.service;
+  $('description').textContent = s.description || 'Описание не предоставлено.';
+  $('special').textContent = s.type && s.type !== 'Default'
+    ? 'Для этой услуги нужны дополнительные параметры. Администратор уточнит их перед подтверждением.'
+    : 'Сумма предварительная; администратор подтвердит условия заявки.';
+  $('link').value = '';
+  $('quantity').min = s.min;
+  $('quantity').max = s.max;
+  $('quantity').value = s.min;
+  $('quantity').readOnly = (Number(s.min) === Number(s.max));
+  $('link').disabled = false;
+  $('quantity').disabled = false;
+  $('submit').disabled = false;
+  $('submit').textContent = 'Отправить заявку';
+  $('formStatus').textContent = '';
+  $('limits').textContent = `(${num(s.min)}–${num(s.max)})`;
+  updatePrice();
+  $('overlay').hidden = false;
+  document.body.style.overflow = 'hidden';
+  $('link').focus();
+}
+
+function closeOrder(){
+  if(sending) return;
+  $('overlay').hidden = true;
+  document.body.style.overflow = '';
+  selected = null;
+  lastFocus?.focus();
+}
+
+async function request(payload){
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 90000);
+  try {
+    const r = await fetch(API_URL, {
+      method: 'POST',
+      credentials: 'omit',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+      signal: ctrl.signal
+    });
+    const text = await r.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error(`HTTP ${r.status}: сервер вернул ошибку.`);
+    }
+    return {response: r, data};
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+$('orderForm').addEventListener('submit', async event => {
+  event.preventDefault();
+  if(sending || sent || !selected) return;
+  updatePrice();
+  if(!$('orderForm').reportValidity()) return;
+  if(!$('link').value.trim()){
+    toast('Укажи ссылку или username.');
+    return;
+  }
+  if(!tg?.initData){
+    $('formStatus').textContent = 'Открой Mini App через кнопку бота в Telegram.';
+    return;
+  }
+
+  const s = selected;
+  const quantity = Number($('quantity').value);
+  const payload = {
+    initData: tg.initData,
+    order: {
+      service: s.service,
+      name: s.name,
+      network: s.network,
+      category: s.category,
+      link: $('link').value.trim(),
+      quantity,
+      total: (Number(s.rate) * quantity / 1000).toFixed(2)
+    }
+  };
+
+  sending = true;
+  $('submit').disabled = true;
+  $('link').disabled = true;
+  $('quantity').disabled = true;
+  $('submit').textContent = 'Отправка…';
+  $('formStatus').textContent = 'Отправляем заявку администратору…';
+
+  try {
+    const {response, data} = await request(payload);
+    if(!response.ok || data.ok !== true){
+      throw new Error(data.error || `HTTP ${response.status}`);
+    }
+    sent = true;
+    $('formStatus').textContent = '✅ Заявка успешно отправлена администратору!';
+    toast('✅ Заявка отправлена!');
+    setTimeout(() => closeOrder(), 2500);
+  } catch(e) {
+    const msg = e.name === 'AbortError'
+      ? 'Превышено время ожидания ответа.'
+      : (e.message || 'Ошибка сети');
+    $('formStatus').textContent = '❌ ' + msg;
+  } finally {
+    sending = false;
+    $('submit').disabled = sent;
+    $('submit').textContent = sent ? 'Заявка отправлена' : 'Повторить отправку';
+    $('link').disabled = sent;
+    $('quantity').disabled = sent;
+  }
 });
-$('test').onclick=async()=>{const b=$('test');b.disabled=true;try{const {response,data}=await request({initData:'',order:{}});if(response.status===400&&data.error==='Telegram initData отсутствует'){log('ПРОВЕРКА УСПЕШНА: JSON POST и CORS работают. Заказ не создавался.');toast('API и CORS работают. Заказ не создавался.');}else toast('Неожиданный ответ. Смотри диагностику.');}catch(e){toast(explain(e));}finally{b.disabled=false;}};
-$('search').oninput=render;$('home').onclick=()=>{network=null;category=null;$('search').value='';render();};$('back').onclick=()=>{if(category)category=null;else network=null;$('search').value='';render();};$('quantity').oninput=updatePrice;$('close').onclick=closeOrder;$('overlay').onclick=e=>{if(e.target===$('overlay'))closeOrder();};
-document.addEventListener('keydown',e=>{if($('overlay').hidden)return;if(e.key==='Escape')closeOrder();if(e.key==='Tab'){const items=[...$('overlay').querySelectorAll('button:not(:disabled),input:not(:disabled)')];const first=items[0],last=items[items.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}});
-window.addEventListener('securitypolicyviolation',e=>log('CSP: '+e.effectiveDirective+' заблокировано '+e.blockedURI.split(/[?#]/)[0]));
-log('build=4; origin='+location.origin+'; API='+API_URL+'; initData='+(tg?.initData?'есть':'нет'));
-try{tg?.ready();tg?.expand();}catch(e){log('Telegram SDK: '+e.message);}
-(async()=>{try{const r=await fetch('./services.json?v=4');if(!r.ok)throw new Error('services.json: HTTP '+r.status);const data=await r.json();if(!Array.isArray(data)||!data.length)throw new Error('services.json должен содержать непустой массив услуг.');services=data.map(s=>({...s,network:String(s.network||'Без сети'),category:String(s.category||'Прочее'),name:String(s.name||'Услуга')}));log('Каталог: '+services.length+' услуг');render();}catch(e){$('heading').textContent='Не удалось загрузить каталог';$('grid').append(el('p','Проверь файл services.json рядом с index.html. '+e.message,'empty'));log(e.message);$('diagnostics').open=true;}})();
+
+$('search').oninput = render;
+$('home').onclick = () => { network = null; category = null; $('search').value = ''; render(); };
+$('back').onclick = () => { if(category) category = null; else network = null; $('search').value = ''; render(); };
+$('quantity').oninput = updatePrice;
+$('close').onclick = closeOrder;
+$('overlay').onclick = e => { if(e.target === $('overlay')) closeOrder(); };
+
+document.addEventListener('keydown', e => {
+  if($('overlay').hidden) return;
+  if(e.key === 'Escape') closeOrder();
+  if(e.key === 'Tab'){
+    const items = [...$('overlay').querySelectorAll('button:not(:disabled),input:not(:disabled)')];
+    const first = items[0], last = items[items.length - 1];
+    if(e.shiftKey && document.activeElement === first){ e.preventDefault(); last.focus(); }
+    else if(!e.shiftKey && document.activeElement === last){ e.preventDefault(); first.focus(); }
+  }
+});
+
+try { tg?.ready(); tg?.expand(); } catch(e) { console.error(e); }
+
+(async () => {
+  try {
+    const r = await fetch('./services.json?v=' + Date.now());
+    if(!r.ok) throw new Error('services.json: HTTP ' + r.status);
+    const data = await r.json();
+    if(!Array.isArray(data) || !data.length) throw new Error('services.json пуст или некорректен.');
+    services = data.map(s => ({
+      ...s,
+      network: String(s.network || 'Без сети'),
+      category: String(s.category || 'Прочее'),
+      name: String(s.name || 'Услуга')
+    }));
+    render();
+  } catch(e) {
+    $('heading').textContent = 'Не удалось загрузить каталог';
+    $('grid').append(el('p', 'Ошибка загрузки каталога: ' + e.message, 'empty'));
+    console.error(e);
+  }
+})();
 </script>
 </body>
 </html>
