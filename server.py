@@ -23,7 +23,7 @@ PORT = int(os.getenv("PORT", "8080"))
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# --- Файл хранения заблокированных пользователей ---
+# --- База заблокированных пользователей ---
 BAN_FILE = Path("banned.json")
 
 def load_banned_users() -> set:
@@ -45,7 +45,6 @@ def save_banned_users(banned_set: set):
 banned_users = load_banned_users()
 
 
-# --- Проверка Telegram initData ---
 def validate_and_parse_init_data(init_data_str: str, bot_token: str) -> dict:
     if not init_data_str:
         raise ValueError("Telegram initData отсутствует")
@@ -67,43 +66,65 @@ def validate_and_parse_init_data(init_data_str: str, bot_token: str) -> dict:
     return {"user": user, "auth_date": parsed.get("auth_date")}
 
 
-# ==================== КОМАНДЫ АДМИНИСТРАТОРА ====================
+# ==================== ОТПРАВКА СООБЩЕНИЙ ЮЗЕРУ (ОТ АДМИНА) ====================
 
-# 1. Отправка сообщения клиенту: /send ID текст
-@dp.message(Command("send"))
-async def cmd_send(message: types.Message):
-    if str(message.from_user.id) != str(ADMIN_CHAT_ID):
+# Поддерживает как обычный текст, так и ФОТО / ДОКУМЕНТЫ / ГОЛОСОВЫЕ с подписью /send ID текст
+@dp.message(F.chat.id == int(ADMIN_CHAT_ID or 0))
+async def handle_admin_messages(message: types.Message):
+    # Текст команды может быть либо в message.text, либо в message.caption (если прикреплено фото)
+    full_text = message.text or message.caption or ""
+    
+    if not full_text.startswith("/send"):
+        # Если это служебные команды бана, пропускаем их дальше
+        if full_text.startswith(("/ban", "/unban", "/banlist")):
+            return
         return
 
-    parts = message.text.split(maxsplit=2)
-    if len(parts) < 3:
+    parts = full_text.split(maxsplit=2)
+    if len(parts) < 2:
         await message.reply(
-            "⚠️ <b>Формат команды:</b>\n"
-            "<code>/send ID_ПОЛЬЗОВАТЕЛЯ Текст сообщения</code>\n\n"
-            "Пример:\n<code>/send 1586986612 Привет, ваш заказ принят!</code>",
+            "⚠️ <b>Формат:</b>\n"
+            "• Текст: <code>/send ID Текст</code>\n"
+            "• Фото/файл: прикрепи файл и в подписи напиши <code>/send ID Текст</code>",
             parse_mode="HTML"
         )
         return
 
     target_id = parts[1].strip()
-    text_to_send = parts[2].strip()
-
     if not target_id.isdigit():
-        await message.reply("❌ ID пользователя должен состоять только из цифр!")
+        await message.reply("❌ ID пользователя должен быть числом!")
         return
 
+    extra_text = parts[2].strip() if len(parts) > 2 else ""
+
     try:
-        await bot.send_message(
-            chat_id=int(target_id),
-            text=f"💬 <b>Сообщение от поддержки:</b>\n\n{escape(text_to_send)}",
-            parse_mode="HTML"
-        )
-        await message.reply(f"✅ Сообщение доставлено клиенту <code>{target_id}</code>!", parse_mode="HTML")
+        # Если админ прикрепил фото/видео/документ
+        if message.content_type != types.ContentType.TEXT:
+            await bot.copy_message(
+                chat_id=int(target_id),
+                from_chat_id=message.chat.id,
+                message_id=message.message_id,
+                caption=f"💬 <b>Сообщение от поддержки:</b>\n\n{escape(extra_text)}" if extra_text else "💬 <b>Сообщение от поддержки</b>",
+                parse_mode="HTML"
+            )
+        else:
+            # Обычное текстовое сообщение
+            if not extra_text:
+                await message.reply("⚠️ Напиши текст сообщения после ID!")
+                return
+            await bot.send_message(
+                chat_id=int(target_id),
+                text=f"💬 <b>Сообщение от поддержки:</b>\n\n{escape(extra_text)}",
+                parse_mode="HTML"
+            )
+            
+        await message.reply(f"✅ Успешно отправлено клиенту <code>{target_id}</code>!", parse_mode="HTML")
     except Exception as e:
-        await message.reply(f"❌ Ошибка отправки: {e}")
+        await message.reply(f"❌ Ошибка отправки: {e}\n(Возможно, клиент заблокировал бота)")
 
 
-# 2. Бан пользователя: /ban ID
+# ==================== УПРАВЛЕНИЕ БАНОМ ====================
+
 @dp.message(Command("ban"))
 async def cmd_ban(message: types.Message):
     if str(message.from_user.id) != str(ADMIN_CHAT_ID):
@@ -117,10 +138,9 @@ async def cmd_ban(message: types.Message):
     target_id = int(parts[1].strip())
     banned_users.add(target_id)
     save_banned_users(banned_users)
-    await message.reply(f"🚫 Пользователь <code>{target_id}</code> <b>заблокирован</b>. Заказы и сообщения от него больше не принимаются.", parse_mode="HTML")
+    await message.reply(f"🚫 Пользователь <code>{target_id}</code> <b>заблокирован</b>.", parse_mode="HTML")
 
 
-# 3. Разбан пользователя: /unban ID
 @dp.message(Command("unban"))
 async def cmd_unban(message: types.Message):
     if str(message.from_user.id) != str(ADMIN_CHAT_ID):
@@ -140,7 +160,6 @@ async def cmd_unban(message: types.Message):
         await message.reply(f"ℹ️ Пользователь <code>{target_id}</code> не был в бане.", parse_mode="HTML")
 
 
-# 4. Список забаненных: /banlist
 @dp.message(Command("banlist"))
 async def cmd_banlist(message: types.Message):
     if str(message.from_user.id) != str(ADMIN_CHAT_ID):
@@ -156,46 +175,64 @@ async def cmd_banlist(message: types.Message):
     await message.reply(text, parse_mode="HTML")
 
 
-# ==================== СООБЩЕНИЯ ОТ КЛИЕНТОВ ====================
+# ==================== СООБЩЕНИЯ И МЕДИА ОТ КЛИЕНТОВ ====================
 
 @dp.message(F.chat.type == "private")
-async def handle_user_message(message: types.Message):
+async def handle_user_incoming(message: types.Message):
     user_id = message.from_user.id
 
-    # Игнорируем команды админа
+    # Игнорируем админа
     if str(user_id) == str(ADMIN_CHAT_ID):
         return
 
-    # Если пользователь в бане — ничего не шлем админу
+    # Забаненные игнорируются
     if user_id in banned_users:
         return
 
-    # Если клиент нажал /start
     if message.text == "/start":
-        await message.answer("👋 Добро пожаловать в VibeBoost! Откройте меню, чтобы выбрать услуги, или напишите свой вопрос сюда.")
+        await message.answer("👋 Добро пожаловать в VibeBoost! Выберите услуги в меню или задайте свой вопрос прямо сюда.")
         return
 
-    # Пересылаем сообщение клиента администратору
     u = message.from_user
     full_name = f"{u.first_name or ''} {u.last_name or ''}".strip() or "Без имени"
     uname = f"@{u.username}" if u.username else "не указан"
 
-    text = (
-        f"📩 <b>Новое сообщение от клиента!</b>\n\n"
+    # Шапка карточки
+    header_text = (
+        f"📩 <b>Входящее от клиента!</b>\n\n"
         f"👤 <b>От:</b> {escape(full_name)} ({uname})\n"
         f"🆔 <b>ID:</b> <code>{user_id}</code>\n\n"
-        f"💬 <b>Текст:</b>\n{escape(message.text or '[Медиа/Файл]')}\n\n"
         f"✍️ Ответить: <code>/send {user_id} </code>\n"
         f"🚫 Забанить: <code>/ban {user_id}</code>"
     )
 
     try:
-        await bot.send_message(chat_id=int(ADMIN_CHAT_ID), text=text, parse_mode="HTML")
+        # Если юзер прислал чисто текст
+        if message.content_type == types.ContentType.TEXT:
+            full_card = (
+                f"📩 <b>Входящее от клиента!</b>\n\n"
+                f"👤 <b>От:</b> {escape(full_name)} ({uname})\n"
+                f"🆔 <b>ID:</b> <code>{user_id}</code>\n\n"
+                f"💬 <b>Текст:</b>\n{escape(message.text)}\n\n"
+                f"✍️ Ответить: <code>/send {user_id} </code>\n"
+                f"🚫 Забанить: <code>/ban {user_id}</code>"
+            )
+            await bot.send_message(chat_id=int(ADMIN_CHAT_ID), text=full_card, parse_mode="HTML")
+        else:
+            # Если юзер прислал ФОТО, ВИДЕО, ЧЕК, ФАЙЛ, ГОЛОСОВОЕ
+            # 1. Шлем карточку с кнопками
+            await bot.send_message(chat_id=int(ADMIN_CHAT_ID), text=header_text, parse_mode="HTML")
+            # 2. Пересылаем/копируем сам файл админу в исходном качестве
+            await bot.copy_message(
+                chat_id=int(ADMIN_CHAT_ID),
+                from_chat_id=message.chat.id,
+                message_id=message.message_id
+            )
     except Exception as e:
-        logging.error("Ошибка пересылки сообщения админу: %s", e)
+        logging.error("Ошибка передачи сообщения от клиента админу: %s", e)
 
 
-# ==================== СЕРВЕР ЗАКАЗОВ (WEB API) ====================
+# ==================== ЗАКАЗЫ С САЙТА ====================
 
 def cors_headers():
     return {
@@ -223,7 +260,6 @@ async def handle_order(request: web.Request):
     user = tg_info.get("user", {})
     user_id = user.get("id")
 
-    # ПРОВЕРКА НА БАН: забаненным запрещено оформлять заявки
     if user_id and int(user_id) in banned_users:
         return web.json_response(
             {"ok": False, "error": "Ваш аккаунт заблокирован администратором."},
@@ -259,7 +295,7 @@ async def handle_order(request: web.Request):
     try:
         await bot.send_message(chat_id=int(ADMIN_CHAT_ID), text=text, parse_mode="HTML")
     except Exception as e:
-        logging.error("Ошибка отправки в чат администратора: %s", e)
+        logging.error("Ошибка отправки заявки админу: %s", e)
         return web.json_response(
             {"ok": False, "error": "Не удалось отправить заявку администратору"},
             status=500,
@@ -271,7 +307,6 @@ async def handle_order(request: web.Request):
 async def health(request: web.Request):
     return web.json_response({"ok": True})
 
-# --- Запуск бота и веб-сервера ---
 async def start_bot(app):
     await bot.delete_webhook(drop_pending_updates=True)
     app["bot_task"] = asyncio.create_task(dp.start_polling(bot))
