@@ -81,20 +81,13 @@ async def order(request: web.Request):
         return web.json_response({"ok": False, "error": "Внутренняя ошибка"}, status=500, headers=headers)
 
 async def health(request):
-    # Render будет опрашивать этот эндпоинт для проверки живости сервиса
     return web.json_response({"ok": True})
-
-async def index(request):
-    # Этот маршрут остаётся на случай, если вы захотите раздавать статику и с Render
-    return web.FileResponse(Path(__file__).resolve().parent.parent / 'frontend' / 'index.html')
 
 async def cleanup(app):
     await bot.session.close()
 
 app = web.Application(client_max_size=32768)
 app.on_cleanup.append(cleanup)
-app.router.add_get('/', index)
-app.router.add_static('/frontend/', Path(__file__).resolve().parent.parent / 'frontend')
 app.router.add_route("OPTIONS", "/api/order", order)
 app.router.add_post("/api/order", order)
 app.router.add_get("/health", health)
