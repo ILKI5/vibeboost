@@ -16,14 +16,13 @@
 <h1 id="heading">Загружаем каталог…</h1>
 <div class="tools"><input id="search" type="search" placeholder="Поиск…" aria-label="Поиск"><span class="muted" id="counter"></span></div>
 <div class="grid" id="grid"></div>
-<details class="diagnostics" id="diagnostics"><summary>Диагностика подключения · build 4</summary><p class="muted">Без токена и initData. Текст можно выделить и скопировать.</p><button class="button" id="test">Проверить API без заказа</button><textarea id="debug" readonly aria-label="Журнал диагностики"></textarea></details>
-<footer>Заявки отправляются администратору. Оплата и автоматический запуск услуг здесь не выполняются. Сумму и дополнительные параметры подтверждает администратор.</footer>
+<footer>Заявки отправляются администратору. Оплата и автоматический запуск услуг здесь не выполняются.</footer>
 </main>
 <div class="overlay" id="overlay" hidden><section class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
 <div class="modal-head"><h2 id="modalTitle">Оформление заявки</h2><button class="button close" id="close" aria-label="Закрыть">×</button></div>
 <strong id="serviceName"></strong><div class="muted" id="serviceMeta"></div><div class="desc" id="description"></div>
 <p class="muted" id="special"></p>
-<form id="orderForm"><label for="link">Ссылка / username</label><input id="link" type="text" placeholder="https://… или @username" maxlength="700" required><label for="quantity">Количество <span class="muted" id="limits"></span></label><input id="quantity" type="number" step="1" required><div class="total"><span>Предварительно</span><strong id="total">—</strong></div><button class="button primary" id="submit" type="submit">Отправить заявку</button><div id="formStatus" role="status"></div></form>
+<form id="orderForm"><label for="link">Ссылка / username</label><input id="link" type="text" placeholder="https://… или @username" maxlength="700" required><label for="quantity">Количество <span class="muted" id="limits"></span></label><input id="quantity" type="number" step="1" required><div class="total"><span></span><strong id="total">—</strong></div><button class="button primary" id="submit" type="submit">Отправить заявку</button><div id="formStatus" role="status"></div></form>
 </section></div>
 <div id="toast" hidden role="status"></div>
 <script>
