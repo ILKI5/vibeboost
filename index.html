@@ -45,7 +45,7 @@ label{display:block;margin:16px 0 6px}
 .total{display:flex;justify-content:space-between;gap:10px;background:#352753;border-radius:12px;padding:16px;margin:20px 0}
 #submit{width:100%}
 #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);max-width:92vw;width:max-content;padding:14px 20px;background:#302549;color:white;border:1px solid #705d99;border-radius:12px;z-index:200;white-space:pre-wrap}
-#formStatus{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;margin-top:14px}
+#formStatus{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;margin-top:14px;line-height:1.4}
 [hidden]{display:none!important}
 footer{color:var(--muted);font-size:12px;margin-top:30px}
 a{color:#c4b4ff}
@@ -77,10 +77,27 @@ const ICONS = {
   'Kick':'kick.png','MAX':'max.png','Wibes':'wibes.png'
 };
 const $ = id => document.getElementById(id);
-const tg = window.Telegram?.WebApp;
+
 let services=[], network=null, category=null, selected=null, sending=false, sent=false, lastFocus=null, toastTimer;
 const money = n => Number(n).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' ₽';
 const num = n => Number(n).toLocaleString('ru-RU');
+
+// Функция надежного извлечения initData (поддерживает и SDK, и hash URL)
+function getTelegramInitData() {
+  const tg = window.Telegram?.WebApp;
+  if (tg?.initData && typeof tg.initData === 'string' && tg.initData.length > 0) {
+    return tg.initData;
+  }
+  // Запасной вариант для мобильных браузеров, где Telegram передает данные в hash URL
+  if (location.hash && location.hash.length > 1) {
+    const rawHash = location.hash.substring(1);
+    const params = new URLSearchParams(rawHash);
+    const fromHash = params.get('tgWebAppData');
+    if (fromHash) return fromHash;
+    if (rawHash.includes('hash=') && rawHash.includes('auth_date=')) return rawHash;
+  }
+  return '';
+}
 
 function toast(message){
   const t = $('toast');
@@ -218,7 +235,7 @@ async function request(payload){
     try {
       data = JSON.parse(text);
     } catch {
-      throw new Error(`HTTP ${r.status}: сервер вернул ошибку.`);
+      throw new Error(`HTTP ${r.status}: сервер вернул некорректный ответ.`);
     }
     return {response: r, data};
   } finally {
@@ -235,15 +252,19 @@ $('orderForm').addEventListener('submit', async event => {
     toast('Укажи ссылку или username.');
     return;
   }
-  if(!tg?.initData){
-    $('formStatus').textContent = 'Открой Mini App через кнопку бота в Telegram.';
+
+  // Получаем initData прямо в момент отправки
+  const initData = getTelegramInitData();
+
+  if(!initData){
+    $('formStatus').textContent = '❌ Не удалось получить данные авторизации Telegram.\nПерезапусти бота или открой каталог через кнопку Menu внизу экрана.';
     return;
   }
 
   const s = selected;
   const quantity = Number($('quantity').value);
   const payload = {
-    initData: tg.initData,
+    initData: initData,
     order: {
       service: s.service,
       name: s.name,
@@ -303,8 +324,16 @@ document.addEventListener('keydown', e => {
   }
 });
 
-try { tg?.ready(); tg?.expand(); } catch(e) { console.error(e); }
+// Инициализация Telegram WebApp
+try {
+  const tg = window.Telegram?.WebApp;
+  tg?.ready();
+  tg?.expand();
+} catch(e) {
+  console.error(e);
+}
 
+// Загрузка каталога
 (async () => {
   try {
     const r = await fetch('./services.json?v=' + Date.now());

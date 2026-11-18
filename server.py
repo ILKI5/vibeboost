@@ -5,7 +5,7 @@ import json
 import logging
 import asyncio
 from pathlib import Path
-from urllib.parse import parse_qsl
+from urllib.parse import parse_qsl, unquote
 from html import escape
 
 from aiohttp import web
@@ -49,7 +49,14 @@ def validate_and_parse_init_data(init_data_str: str, bot_token: str) -> dict:
     if not init_data_str:
         raise ValueError("Telegram initData отсутствует")
 
-    parsed = dict(parse_qsl(init_data_str, keep_blank_values=True))
+    # Обработка возможного двойного url-encoding с телефонов
+    raw_str = init_data_str
+    if raw_str.startswith("tgWebAppData="):
+        raw_str = raw_str.split("tgWebAppData=", 1)[1]
+        raw_str = raw_str.split("&tgWebAppVersion=", 1)[0]
+        raw_str = unquote(raw_str)
+
+    parsed = dict(parse_qsl(raw_str, keep_blank_values=True))
     received_hash = parsed.pop("hash", None)
     if not received_hash:
         raise ValueError("В initData отсутствует хэш подписи")
@@ -68,14 +75,11 @@ def validate_and_parse_init_data(init_data_str: str, bot_token: str) -> dict:
 
 # ==================== ОТПРАВКА СООБЩЕНИЙ ЮЗЕРУ (ОТ АДМИНА) ====================
 
-# Поддерживает как обычный текст, так и ФОТО / ДОКУМЕНТЫ / ГОЛОСОВЫЕ с подписью /send ID текст
 @dp.message(F.chat.id == int(ADMIN_CHAT_ID or 0))
 async def handle_admin_messages(message: types.Message):
-    # Текст команды может быть либо в message.text, либо в message.caption (если прикреплено фото)
     full_text = message.text or message.caption or ""
     
     if not full_text.startswith("/send"):
-        # Если это служебные команды бана, пропускаем их дальше
         if full_text.startswith(("/ban", "/unban", "/banlist")):
             return
         return
@@ -98,7 +102,6 @@ async def handle_admin_messages(message: types.Message):
     extra_text = parts[2].strip() if len(parts) > 2 else ""
 
     try:
-        # Если админ прикрепил фото/видео/документ
         if message.content_type != types.ContentType.TEXT:
             await bot.copy_message(
                 chat_id=int(target_id),
@@ -108,7 +111,6 @@ async def handle_admin_messages(message: types.Message):
                 parse_mode="HTML"
             )
         else:
-            # Обычное текстовое сообщение
             if not extra_text:
                 await message.reply("⚠️ Напиши текст сообщения после ID!")
                 return
@@ -181,11 +183,9 @@ async def cmd_banlist(message: types.Message):
 async def handle_user_incoming(message: types.Message):
     user_id = message.from_user.id
 
-    # Игнорируем админа
     if str(user_id) == str(ADMIN_CHAT_ID):
         return
 
-    # Забаненные игнорируются
     if user_id in banned_users:
         return
 
@@ -197,7 +197,6 @@ async def handle_user_incoming(message: types.Message):
     full_name = f"{u.first_name or ''} {u.last_name or ''}".strip() or "Без имени"
     uname = f"@{u.username}" if u.username else "не указан"
 
-    # Шапка карточки
     header_text = (
         f"📩 <b>Входящее от клиента!</b>\n\n"
         f"👤 <b>От:</b> {escape(full_name)} ({uname})\n"
@@ -207,7 +206,6 @@ async def handle_user_incoming(message: types.Message):
     )
 
     try:
-        # Если юзер прислал чисто текст
         if message.content_type == types.ContentType.TEXT:
             full_card = (
                 f"📩 <b>Входящее от клиента!</b>\n\n"
@@ -219,10 +217,7 @@ async def handle_user_incoming(message: types.Message):
             )
             await bot.send_message(chat_id=int(ADMIN_CHAT_ID), text=full_card, parse_mode="HTML")
         else:
-            # Если юзер прислал ФОТО, ВИДЕО, ЧЕК, ФАЙЛ, ГОЛОСОВОЕ
-            # 1. Шлем карточку с кнопками
             await bot.send_message(chat_id=int(ADMIN_CHAT_ID), text=header_text, parse_mode="HTML")
-            # 2. Пересылаем/копируем сам файл админу в исходном качестве
             await bot.copy_message(
                 chat_id=int(ADMIN_CHAT_ID),
                 from_chat_id=message.chat.id,
