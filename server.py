@@ -168,7 +168,7 @@ async def submit_order(request):
             "quantity": str(quantity),
             "key": TWIBOOST_API_KEY
         }
-        async with http.get("https://twiboost.com/api/v2", params=params, timeout=ClientTimeout(total=35)) as r:
+        async with http.get("https://smmstay.xyz/api/v2", params=params, timeout=ClientTimeout(total=35)) as r:
             provider_text = await r.text()
             try:
                 provider = json.loads(provider_text)
