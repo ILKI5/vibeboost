@@ -7,182 +7,470 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
 :root{
-  color-scheme: dark;
-  --bg: #070b18;
-  --panel: #11182b;
-  --panel2: #18223b;
-  --line: rgba(255,255,255,0.08);
-  --text: #f4f3ff;
-  --muted: #9ca8c5;
-  --accent: #9b7cff;
-  --cyan: #55d9ff;
-  --green: #65e6a1;
-  --red: #ff7185;
+  color-scheme:dark;
+  --bg:#05070f;
+  --glass:rgba(255,255,255,.055);
+  --glass2:rgba(255,255,255,.02);
+  --line:rgba(255,255,255,.09);
+  --text:#f3f5ff;
+  --muted:#8f9dbf;
+  --accent:#8e62ff;
+  --cyan:#3fe0ff;
+  --green:#4ff3a6;
 }
 *{box-sizing:border-box}
-html,body{margin:0;min-height:100%;font:15px/1.5 -apple-system,BlinkMacSystemFont,Inter,system-ui,sans-serif;color:var(--text);background:var(--bg)}
-body{overflow-x:hidden;background:radial-gradient(circle at 15% 0%,#2d1b54 0,transparent 40%),radial-gradient(circle at 100% 10%,#113856 0,transparent 35%),var(--bg)}
-body:before,body:after{content:"";position:fixed;z-index:-1;width:50vw;height:50vw;border-radius:50%;filter:blur(80px);opacity:.35;pointer-events:none;animation:float 12s ease-in-out infinite alternate}
-body:before{background:#7655ff;top:5%;left:-10%}
-body:after{background:#1bc7ec;right:-10%;bottom:5%;animation-delay:-6s}
-@keyframes float{to{transform:translate(6vw,4vh) scale(1.15)}}
+html,body{margin:0;min-height:100%;background:var(--bg)}
+body{font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:var(--text);overflow-x:hidden;-webkit-font-smoothing:antialiased}
+canvas#bgCanvas{position:fixed;inset:0;width:100%;height:100%;z-index:0;display:block}
+.vignette{position:fixed;inset:0;z-index:1;pointer-events:none;background:radial-gradient(ellipse at 50% 0%,transparent 30%,rgba(3,5,12,.55) 100%)}
+.grain{
+  position:fixed;inset:0;z-index:2;pointer-events:none;opacity:.035;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.app{position:relative;z-index:3}
 
-header{position:sticky;top:0;z-index:20;padding:12px 16px;background:rgba(8,13,27,0.85);border-bottom:1px solid var(--line);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
-.header{max-width:1000px;margin:auto;display:flex;align-items:center;justify-content:space-between;gap:12px}
-.logo{border:0;background:none;color:#fff;font-size:24px;font-weight:900;letter-spacing:-0.5px;cursor:pointer;padding:0}
-.logo span{color:var(--accent)}
-.balance{display:flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid rgba(255,255,255,0.12);border-radius:999px;background:linear-gradient(135deg,rgba(255,255,255,0.08),rgba(255,255,255,0.02));box-shadow:0 4px 20px rgba(0,0,0,0.2)}
-.balance small{color:var(--muted);font-size:11px}
-.bal{font-weight:800;color:var(--green);white-space:nowrap;font-size:14px}
-.plus{width:26px;height:26px;border:0;border-radius:50%;color:#fff;background:linear-gradient(135deg,var(--accent),#6040d8);font-size:18px;line-height:1;display:grid;place-items:center;cursor:pointer;box-shadow:0 0 15px rgba(141,108,255,0.4);transition:transform .15s}
-.plus:active{transform:scale(0.9)}
+header{
+  position:sticky;top:0;z-index:40;padding:12px 18px;
+  background:rgba(6,9,19,.55);
+  backdrop-filter:blur(22px) saturate(140%);
+  -webkit-backdrop-filter:blur(22px) saturate(140%);
+  border-bottom:1px solid var(--line);
+  animation:slideDown .6s cubic-bezier(.2,.8,.2,1) both;
+}
+@keyframes slideDown{from{opacity:0;transform:translateY(-18px)}to{opacity:1;transform:none}}
+.header-row{max-width:1000px;margin:auto;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.logo-btn{border:0;background:none;color:#fff;font-size:23px;font-weight:900;letter-spacing:-.6px;cursor:pointer;padding:0}
+.logo-btn span{
+  background:linear-gradient(115deg,#a97dff,#3fe0ff,#a97dff);background-size:220% auto;
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  animation:shimmerText 5s linear infinite;
+}
+@keyframes shimmerText{to{background-position:220% center}}
+.balance-pill{
+  display:flex;align-items:center;gap:10px;padding:6px 13px;border:1px solid var(--line);border-radius:999px;
+  background:linear-gradient(135deg,rgba(255,255,255,.07),rgba(255,255,255,.02));
+  box-shadow:0 6px 24px rgba(0,0,0,.35);
+  transition:border-color .25s,box-shadow .25s;
+}
+.balance-pill:hover{border-color:rgba(142,98,255,.45);box-shadow:0 6px 26px rgba(142,98,255,.22)}
+.bal-label{color:var(--muted);font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
+.bal-val{font-weight:800;color:var(--green);white-space:nowrap;font-size:14px;text-shadow:0 0 14px rgba(79,243,166,.4)}
+.plus-btn{
+  width:26px;height:26px;border:0;border-radius:50%;color:#fff;
+  background:linear-gradient(135deg,#8e62ff,#4a2bd6);font-size:17px;font-weight:700;line-height:1;
+  display:grid;place-items:center;cursor:pointer;box-shadow:0 0 16px rgba(142,98,255,.55);
+  transition:transform .16s cubic-bezier(.2,.8,.2,1),box-shadow .25s;
+}
+.plus-btn:hover{box-shadow:0 0 26px rgba(142,98,255,.85)}
+.plus-btn:active{transform:scale(.86)}
 
-.wrap{max-width:1000px;margin:auto;padding:20px 16px 60px}
-.hero{padding:6px 0 20px}
-.eyebrow{display:inline-flex;padding:5px 10px;border:1px solid rgba(169,140,255,0.25);border-radius:999px;color:#c8bbff;background:rgba(155,124,255,0.08);font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:700}
-.hero h1{font-size:clamp(28px,5vw,44px);line-height:1.1;letter-spacing:-1px;margin:12px 0 8px;font-weight:900}
-.hero h1 span{background:linear-gradient(100deg,#fff,#a98cff 55%,#59dfff);-webkit-background-clip:text;background-clip:text;color:transparent}
-.hero p{margin:0;color:var(--muted);font-size:14px}
+.wrap{max-width:1000px;margin:auto;padding:18px 16px 70px}
+.hero{padding:12px 0 22px}
+.badge-tag{
+  display:inline-flex;align-items:center;gap:7px;padding:5px 12px;
+  border:1px solid rgba(169,130,255,.3);border-radius:999px;background:rgba(142,98,255,.09);
+  color:#d3c4ff;font-size:10.5px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;
+  animation:fadeUp .7s .05s cubic-bezier(.2,.8,.2,1) both;
+}
+.badge-dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 9px var(--green);animation:pulseDot 2.2s ease-in-out infinite}
+@keyframes pulseDot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.75)}}
+.hero h1{
+  font-size:clamp(29px,6vw,46px);line-height:1.07;letter-spacing:-1.4px;margin:14px 0 9px;font-weight:900;
+  animation:fadeUp .75s .12s cubic-bezier(.2,.8,.2,1) both;
+}
+.hero h1 span{
+  background:linear-gradient(105deg,#ffffff,#c2a6ff 40%,#3fe0ff 80%,#ffffff);
+  background-size:250% auto;-webkit-background-clip:text;background-clip:text;color:transparent;
+  animation:shimmerText 7s linear infinite;filter:drop-shadow(0 4px 24px rgba(160,130,255,.28));
+}
+.hero p{margin:0;color:var(--muted);font-size:14px;max-width:520px;animation:fadeUp .75s .2s cubic-bezier(.2,.8,.2,1) both}
+@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 
-.tools{display:flex;gap:10px;align-items:center;margin:16px 0 18px}
-.search{flex:1;min-width:0;padding:12px 16px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,0.04);color:var(--text);outline:0;font-size:14px;transition:border-color .2s}
-.search:focus{border-color:rgba(155,124,255,0.6)}
-.counter{color:var(--muted);font-size:12px;white-space:nowrap}
+.search-bar{display:flex;gap:10px;align-items:center;margin:16px 0 20px;animation:fadeUp .7s .26s cubic-bezier(.2,.8,.2,1) both}
+.search-input{
+  flex:1;min-width:0;padding:13px 17px;border:1px solid var(--line);border-radius:16px;
+  background:rgba(255,255,255,.04);color:var(--text);outline:0;font-size:14px;
+  backdrop-filter:blur(14px);transition:border-color .25s,box-shadow .25s,background .25s;
+}
+.search-input::placeholder{color:#6f7b9b}
+.search-input:focus{border-color:rgba(142,98,255,.6);background:rgba(255,255,255,.06);box-shadow:0 0 0 4px rgba(142,98,255,.12)}
+.counter-txt{color:var(--muted);font-size:12px;font-weight:600;white-space:nowrap}
 
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
-.card{position:relative;display:flex;align-items:center;gap:12px;width:100%;min-height:90px;padding:16px;text-align:left;color:var(--text);border:1px solid var(--line);border-radius:18px;background:linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.01));box-shadow:0 8px 25px rgba(0,0,0,0.2);overflow:hidden;cursor:pointer;transition:transform .18s,border-color .18s}
-.card:active{transform:scale(0.98)}
-.icon{display:grid;place-items:center;flex:0 0 46px;width:46px;height:46px;border-radius:14px;background:linear-gradient(135deg,rgba(155,124,255,0.2),rgba(85,217,255,0.1));border:1px solid var(--line);color:#d5caff;font-weight:900}
-.icon img{width:40px;height:40px;object-fit:contain}
-.info{flex:1;min-width:0}
-.title{display:block;font-weight:800;font-size:14px;overflow-wrap:anywhere}
-.sub{display:block;color:var(--muted);font-size:12px;margin-top:3px}
-.price{display:block;color:#c6b8ff;font-weight:800;margin-top:6px;font-size:13px}
-.arrow{color:#8f9bb8;font-size:22px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(255px,1fr));gap:13px}
+.card{
+  position:relative;display:flex;align-items:center;gap:14px;width:100%;min-height:92px;padding:17px;
+  text-align:left;color:var(--text);border:1px solid var(--line);border-radius:20px;
+  background:linear-gradient(135deg,var(--glass),var(--glass2));
+  box-shadow:0 10px 30px rgba(0,0,0,.28);
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  overflow:hidden;cursor:pointer;
+  transition:transform .28s cubic-bezier(.2,.8,.2,1),border-color .28s,box-shadow .28s;
+  animation:cardIn .5s cubic-bezier(.2,.8,.2,1) both;
+}
+@keyframes cardIn{from{opacity:0;transform:translateY(16px) scale(.98)}to{opacity:1;transform:none}}
+.card::after{
+  content:"";position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .35s;
+  background:radial-gradient(240px circle at var(--mx,50%) var(--my,50%),rgba(142,98,255,.22),transparent 65%);
+}
+.card:hover{transform:translateY(-3px);border-color:rgba(169,130,255,.5);box-shadow:0 18px 44px rgba(108,58,255,.22)}
+.card:hover::after{opacity:1}
+.card:active{transform:scale(.985)}
+.card-icon{
+  display:grid;place-items:center;flex:0 0 48px;width:48px;height:48px;border-radius:15px;
+  background:linear-gradient(135deg,rgba(142,98,255,.28),rgba(63,224,255,.14));
+  border:1px solid rgba(255,255,255,.13);color:#d9ccff;font-weight:900;font-size:14px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 6px 18px rgba(0,0,0,.3);
+}
+.card-icon img{width:42px;height:42px;object-fit:contain}
+.card-info{flex:1;min-width:0}
+.card-title{display:block;font-weight:800;font-size:15px;line-height:1.25;overflow-wrap:anywhere}
+.card-sub{display:block;color:var(--muted);font-size:12px;margin-top:4px}
+.card-price{display:block;color:#d3c6ff;font-weight:800;font-size:13px;margin-top:6px;text-shadow:0 0 12px rgba(211,198,255,.3)}
+.card-arrow{color:#7f8bab;font-size:21px;transition:transform .28s,color .28s}
+.card:hover .card-arrow{transform:translateX(4px);color:#fff}
 
-.back{border:1px solid var(--line);border-radius:12px;padding:9px 14px;background:rgba(255,255,255,0.05);color:var(--text);cursor:pointer;margin-bottom:12px;font-weight:600}
-.footer{margin-top:35px;color:#74809e;font-size:12px;text-align:center}
+.back-btn{
+  border:1px solid var(--line);border-radius:14px;padding:10px 15px;background:rgba(255,255,255,.05);
+  color:var(--text);cursor:pointer;margin-bottom:14px;font-weight:700;font-size:13px;
+  display:inline-flex;align-items:center;gap:8px;backdrop-filter:blur(10px);
+  transition:border-color .22s,transform .22s;
+}
+.back-btn:hover{border-color:rgba(142,98,255,.6);transform:translateX(-3px)}
+.empty-state{padding:34px 20px;color:var(--muted);text-align:center;font-size:14px}
+.footer-text{margin-top:42px;color:#5f6b88;font-size:11.5px;text-align:center}
 
-.overlay{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(2,5,17,0.85);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
-.modal{width:100%;max-width:520px;max-height:90dvh;overflow:auto;padding:22px;border:1px solid rgba(255,255,255,0.12);border-radius:22px;background:linear-gradient(145deg,#151e35,#0d1425);box-shadow:0 25px 80px rgba(0,0,0,0.8)}
-.modalhead{display:flex;justify-content:space-between;align-items:start;margin-bottom:10px}
-.modal h2{margin:0;font-size:20px;font-weight:800}
-.close{border:0;background:none;color:var(--muted);font-size:26px;line-height:1;cursor:pointer}
-.desc{max-height:140px;overflow:auto;white-space:pre-wrap;margin:12px 0;padding:12px;border-radius:12px;background:#050a16;color:var(--muted);font-size:13px}
-.meta{color:var(--muted);font-size:12px;margin-top:3px}
-label{display:block;margin:14px 0 6px;font-size:13px;color:#c6cce0;font-weight:600}
-.field{width:100%;padding:12px;border:1px solid var(--line);border-radius:12px;background:#080e1c;color:var(--text);outline:0;font-size:14px}
-.field:focus{border-color:var(--accent)}
-.total{display:flex;justify-content:space-between;margin:16px 0;padding:14px;border-radius:14px;background:linear-gradient(120deg,#34215e,#1a2d4d);font-size:15px;font-weight:700}
-.status{white-space:pre-wrap;margin-top:12px;font-size:13px;line-height:1.4}
-.primary{width:100%;padding:13px;border:0;border-radius:13px;background:linear-gradient(110deg,#7957e8,#ae6dec);color:#fff;font-weight:800;font-size:15px;cursor:pointer;box-shadow:0 6px 20px rgba(141,108,255,0.3);transition:transform .15s,filter .15s}
-.primary:active{transform:scale(0.98)}
-.primary:disabled{opacity:.6;cursor:not-allowed;transform:none}
-.loading{display:inline-flex;align-items:center;gap:8px}
-.spin{width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}
+.overlay{
+  position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;padding:16px;
+  background:rgba(2,4,12,.78);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  animation:fadeIn .25s ease-out both;
+}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.sheet{
+  width:100%;max-width:520px;max-height:90dvh;overflow:auto;padding:24px;
+  border:1px solid rgba(255,255,255,.13);border-radius:26px;
+  background:linear-gradient(155deg,#151d36 0%,#0a1020 100%);
+  box-shadow:0 34px 110px rgba(0,0,0,.85),0 0 70px rgba(142,98,255,.14);
+  animation:sheetIn .38s cubic-bezier(.2,.8,.2,1) both;
+}
+@keyframes sheetIn{from{opacity:0;transform:translateY(26px) scale(.96)}to{opacity:1;transform:none}}
+.sheet-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px}
+.sheet-head h2{margin:0;font-size:20px;font-weight:900;letter-spacing:-.4px}
+.close-btn{
+  width:32px;height:32px;flex:0 0 32px;border-radius:50%;border:1px solid var(--line);
+  background:rgba(255,255,255,.05);color:var(--muted);font-size:15px;
+  display:grid;place-items:center;cursor:pointer;transition:color .22s,border-color .22s,transform .18s;
+}
+.close-btn:hover{color:#fff;border-color:rgba(255,255,255,.32)}
+.close-btn:active{transform:scale(.9)}
+.sheet-desc{
+  max-height:128px;overflow:auto;white-space:pre-wrap;margin:12px 0;padding:12px 14px;border-radius:14px;
+  border:1px solid rgba(255,255,255,.06);background:rgba(0,0,0,.35);
+  color:var(--muted);font-size:12.5px;line-height:1.45;
+}
+.sheet-meta{color:var(--muted);font-size:12px;margin-top:3px}
+label{display:block;margin:14px 0 6px;font-size:12.5px;color:#ccd3e6;font-weight:700}
+.field{
+  width:100%;padding:13px 16px;border:1px solid var(--line);border-radius:14px;
+  background:rgba(0,0,0,.32);color:var(--text);outline:0;font-size:14px;
+  transition:border-color .22s,box-shadow .22s;
+}
+.field:focus{border-color:rgba(142,98,255,.65);box-shadow:0 0 0 4px rgba(142,98,255,.1)}
+.total-banner{
+  display:flex;justify-content:space-between;align-items:center;gap:10px;
+  margin:18px 0;padding:15px 18px;border-radius:16px;border:1px solid rgba(255,255,255,.1);
+  background:linear-gradient(115deg,rgba(142,98,255,.26),rgba(63,224,255,.14));
+  font-weight:800;font-size:14px;
+}
+.total-sum{font-size:18px;color:#5ce6ff;text-shadow:0 0 16px rgba(63,224,255,.45)}
+.status-box{white-space:pre-wrap;margin-top:12px;font-size:12.5px;line-height:1.45;color:#ffc2d2}
+
+.glow-btn{
+  position:relative;width:100%;padding:14px;border:0;border-radius:16px;overflow:hidden;
+  background:linear-gradient(110deg,#7d4cff,#a95cff 30%,#3fe0ff 65%,#7d4cff 100%);
+  background-size:300% auto;color:#fff;font-weight:800;font-size:15px;letter-spacing:.2px;cursor:pointer;
+  box-shadow:0 10px 32px rgba(142,98,255,.42);
+  transition:transform .18s cubic-bezier(.2,.8,.2,1),box-shadow .25s,filter .2s;
+  animation:flowGradient 6s linear infinite;
+}
+@keyframes flowGradient{to{background-position:300% center}}
+.glow-btn::before{
+  content:"";position:absolute;top:0;left:-60%;width:45%;height:100%;
+  background:linear-gradient(100deg,transparent,rgba(255,255,255,.42),transparent);
+  transform:skewX(-18deg);animation:sheen 3.4s ease-in-out infinite;
+}
+@keyframes sheen{0%{left:-60%}55%{left:120%}100%{left:120%}}
+.glow-btn:hover{transform:translateY(-2px);box-shadow:0 16px 44px rgba(142,98,255,.6)}
+.glow-btn:active{transform:scale(.98)}
+.glow-btn:disabled{opacity:.62;cursor:not-allowed;transform:none;animation-play-state:paused;filter:grayscale(.25)}
+.glow-btn>*{position:relative;z-index:1}
+.spin-wrap{display:inline-flex;align-items:center;gap:9px}
+.spinner{width:17px;height:17px;border:2px solid rgba(255,255,255,.32);border-top-color:#fff;border-radius:50%;animation:spin .68s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-#toast{position:fixed;left:50%;bottom:22px;z-index:300;transform:translateX(-50%);max-width:92vw;padding:12px 18px;border:1px solid rgba(155,124,255,0.4);border-radius:12px;background:#17132b;color:#fff;box-shadow:0 10px 30px rgba(0,0,0,0.6);font-size:13px;white-space:pre-wrap}
-
-.splash{position:fixed;inset:0;z-index:500;display:grid;place-items:center;background:#070b18;transition:opacity .35s,visibility .35s}
+#toast{
+  position:fixed;left:50%;bottom:24px;z-index:200;transform:translateX(-50%);
+  max-width:92vw;padding:13px 19px;font-size:13px;font-weight:600;white-space:pre-wrap;
+  border:1px solid rgba(169,130,255,.45);border-radius:16px;
+  background:rgba(20,15,40,.95);backdrop-filter:blur(16px);color:#fff;
+  box-shadow:0 16px 44px rgba(0,0,0,.7),0 0 26px rgba(142,98,255,.3);
+  animation:toastIn .3s cubic-bezier(.2,.8,.2,1) both;
+}
+@keyframes toastIn{from{opacity:0;transform:translate(-50%,16px)}to{opacity:1;transform:translate(-50%,0)}}
+.splash{position:fixed;inset:0;z-index:300;display:grid;place-items:center;background:#05070f;transition:opacity .45s ease,visibility .45s ease}
 .splash.hide{opacity:0;visibility:hidden;pointer-events:none}
-.splashbox{text-align:center}
-.splashlogo{font-size:32px;font-weight:900;letter-spacing:-1px}
-.splashlogo span{color:var(--accent)}
-.loader{width:40px;height:40px;margin:18px auto;border:3px solid rgba(255,255,255,0.1);border-top-color:var(--accent);border-right-color:var(--cyan);border-radius:50%;animation:spin .8s linear infinite}
-.splashtext{color:var(--muted);font-size:13px}
+.splash-inner{text-align:center}
+.splash-title{font-size:32px;font-weight:900;letter-spacing:-1px}
+.splash-title span{background:linear-gradient(115deg,#a97dff,#3fe0ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.splash-ring{
+  width:46px;height:46px;margin:20px auto 14px;border-radius:50%;
+  border:3px solid rgba(255,255,255,.08);border-top-color:#8e62ff;border-right-color:#3fe0ff;
+  animation:spin .85s linear infinite;box-shadow:0 0 26px rgba(142,98,255,.45);
+}
+.splash-text{color:var(--muted);font-size:12.5px;letter-spacing:.4px}
 [hidden]{display:none!important}
+::-webkit-scrollbar{width:8px}
+::-webkit-scrollbar-thumb{background:rgba(142,98,255,.35);border-radius:8px}
+@media(max-width:600px){
+  .wrap{padding:16px 14px 60px}
+  .hero h1{font-size:32px}
+  .search-bar{flex-direction:column;align-items:stretch;gap:8px}
+  .counter-txt{align-self:flex-end}
+  .bal-label{display:none}
+  .sheet{padding:20px;border-radius:22px}
+}
+@media(prefers-reduced-motion:reduce){
+  *{animation-duration:.001s!important;animation-iteration-count:1!important;transition-duration:.001s!important}
+}
 </style>
 </head>
 <body>
 
+<canvas id="bgCanvas"></canvas>
+<div class="vignette"></div>
+<div class="grain"></div>
+
 <div class="splash" id="splash">
-  <div class="splashbox">
-    <div class="splashlogo">Vibe<span>Boost</span></div>
-    <div class="loader"></div>
-    <div class="splashtext">Запуск приложения…</div>
+  <div class="splash-inner">
+    <div class="splash-title">Vibe<span>Boost</span></div>
+    <div class="splash-ring"></div>
+    <div class="splash-text">Запуск каталога…</div>
   </div>
 </div>
 
-<header>
-  <div class="header">
-    <button class="logo" id="home">Vibe<span>Boost</span></button>
-    <div class="balance">
-      <small>Баланс</small>
-      <span class="bal" id="balance">… ₽</span>
-      <button class="plus" id="openTopup" aria-label="Пополнить">+</button>
-    </div>
-  </div>
-</header>
-
-<main class="wrap">
-  <section class="hero">
-    <div class="eyebrow">Продвижение нового уровня</div>
-    <h1>Выбирай.<br><span>Запускай результат.</span></h1>
-    <p>Услуги для роста твоих социальных сетей — быстро, удобно и в одном месте.</p>
-  </section>
-
-  <button class="back" id="back" hidden>← Назад</button>
-  
-  <div class="tools">
-    <input class="search" id="search" type="search" placeholder="Поиск услуги или площадки…">
-    <span class="counter" id="counter"></span>
-  </div>
-  
-  <div class="grid" id="grid"></div>
-  <div class="footer">Безопасная оплата с баланса профиля</div>
-</main>
-
-<!-- Модалка заказа -->
-<div class="overlay" id="orderOverlay" hidden>
-  <section class="modal">
-    <div class="modalhead">
-      <h2>Оформление заказа</h2>
-      <button class="close" id="closeOrder">×</button>
-    </div>
-    <strong id="serviceName" style="font-size:15px"></strong>
-    <div class="meta" id="serviceMeta"></div>
-    <div class="desc" id="description"></div>
-    <form id="orderForm">
-      <label for="link">Ссылка / username</label>
-      <input class="field" id="link" required maxlength="700" placeholder="https://… или @username">
-      <label for="quantity">Количество <span class="meta" id="limits"></span></label>
-      <input class="field" id="quantity" type="number" step="1" required>
-      <div class="total">
-        <span>К оплате:</span>
-        <strong id="total" style="color:#d5caff">—</strong>
+<div class="app">
+  <header>
+    <div class="header-row">
+      <button class="logo-btn" id="home">Vibe<span>Boost</span></button>
+      <div class="balance-pill">
+        <span class="bal-label">Баланс</span>
+        <span class="bal-val" id="balance">… ₽</span>
+        <button class="plus-btn" id="openTopup" aria-label="Пополнить">+</button>
       </div>
-      <button class="primary" id="submit" type="submit">Подтвердить заказ</button>
-      <div class="status" id="orderStatus"></div>
-    </form>
-  </section>
-</div>
-
-<!-- Модалка пополнения -->
-<div class="overlay" id="topupOverlay" hidden>
-  <section class="modal">
-    <div class="modalhead">
-      <h2>Пополнение баланса</h2>
-      <button class="close" id="closeTopup">×</button>
     </div>
-    <p class="meta" style="margin-top:0">Выбери сумму для пополнения счета:</p>
-    <label for="topupAmount">Сумма, ₽</label>
-    <input class="field" id="topupAmount" type="number" min="10" max="100000" value="100">
-    <label for="topupMethod">Способ оплаты</label>
-    <select class="field" id="topupMethod">
-      <option value="sbp">СБП / Банковская карта РФ</option>
-      <option value="crypto">Криптовалюта (USDT / TON)</option>
-      <option value="other">Другой способ</option>
-    </select>
-    <button class="primary" id="createTopup" style="margin-top:16px">Создать запрос</button>
-    <div class="status" id="topupStatus"></div>
-  </section>
-</div>
+  </header>
 
-<div id="toast" hidden></div>
+  <main class="wrap">
+    <section class="hero">
+      <div class="badge-tag"><span class="badge-dot"></span> Продвижение нового уровня</div>
+      <h1>Выбирай.<br><span>Запускай результат.</span></h1>
+      <p>Услуги для быстрого и безопасного роста твоих социальных сетей.</p>
+    </section>
+
+    <button class="back-btn" id="back" hidden>← Назад</button>
+
+    <div class="search-bar">
+      <input class="search-input" id="search" type="search" placeholder="Поиск услуги или категории…">
+      <span class="counter-txt" id="counter"></span>
+    </div>
+
+    <div class="grid" id="grid"></div>
+    <div class="footer-text">Оплата моментально списывается с баланса профиля</div>
+  </main>
+
+  <div class="overlay" id="orderOverlay" hidden>
+    <section class="sheet">
+      <div class="sheet-head">
+        <h2>Оформление заказа</h2>
+        <button class="close-btn" id="closeOrder">✕</button>
+      </div>
+      <strong id="serviceName" style="font-size:15.5px"></strong>
+      <div class="sheet-meta" id="serviceMeta"></div>
+      <div class="sheet-desc" id="description"></div>
+      <form id="orderForm">
+        <label for="link">Ссылка на страницу / канал / @username</label>
+        <input class="field" id="link" required maxlength="700" placeholder="https://… или @username">
+        <label for="quantity">Количество <span class="sheet-meta" id="limits"></span></label>
+        <input class="field" id="quantity" type="number" step="1" required>
+        <div class="total-banner">
+          <span>Сумма к списанию:</span>
+          <span class="total-sum" id="total">—</span>
+        </div>
+        <button class="glow-btn" id="submit" type="submit"><span>Подтвердить заказ</span></button>
+        <div class="status-box" id="orderStatus"></div>
+      </form>
+    </section>
+  </div>
+
+  <div class="overlay" id="topupOverlay" hidden>
+    <section class="sheet">
+      <div class="sheet-head">
+        <h2>Пополнение баланса</h2>
+        <button class="close-btn" id="closeTopup">✕</button>
+      </div>
+      <p class="sheet-meta" style="margin-top:0">Укажите сумму — администратор подтвердит начисление после перевода.</p>
+      <label for="topupAmount">Сумма, ₽</label>
+      <input class="field" id="topupAmount" type="number" min="10" max="100000" value="100">
+      <label for="topupMethod">Способ оплаты</label>
+      <select class="field" id="topupMethod">
+        <option value="sbp">СБП / Банковская карта РФ</option>
+        <option value="crypto">Криптовалюта (USDT / TON / BTC)</option>
+        <option value="other">Другой способ</option>
+      </select>
+      <button class="glow-btn" id="createTopup" style="margin-top:18px"><span>Создать запрос</span></button>
+      <div class="status-box" id="topupStatus"></div>
+    </section>
+  </div>
+
+  <div id="toast" hidden></div>
+</div>
 
 <script>
 'use strict';
+
+/* ===== ПЛАВНЫЙ АНИМИРОВАННЫЙ ФОН ===== */
+(function background(){
+  const canvas = document.getElementById('bgCanvas');
+  const ctx = canvas.getContext('2d', { alpha: false });
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  let W = 0, H = 0, DPR = 1, raf = null, last = 0, t = 0;
+  let blobs = [], particles = [];
+
+  function hexToRgb(hex){
+    const n = parseInt(hex.slice(1), 16);
+    return [ (n >> 16) & 255, (n >> 8) & 255, n & 255 ];
+  }
+
+  function makeSprite(hex, size){
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    const g = c.getContext('2d');
+    const [r, gr, b] = hexToRgb(hex);
+    const grad = g.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
+    grad.addColorStop(0.00, 'rgba(' + r + ',' + gr + ',' + b + ',0.55)');
+    grad.addColorStop(0.35, 'rgba(' + r + ',' + gr + ',' + b + ',0.26)');
+    grad.addColorStop(0.70, 'rgba(' + r + ',' + gr + ',' + b + ',0.08)');
+    grad.addColorStop(1.00, 'rgba(' + r + ',' + gr + ',' + b + ',0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, size, size);
+    return c;
+  }
+
+  const COLORS = ['#8b5cff', '#2fd4ff', '#ff4bd8', '#5b7cff', '#66ffc2'];
+
+  function build(){
+    blobs = COLORS.map((color, i) => ({
+      sprite: makeSprite(color, 256),
+      baseX: [0.18, 0.82, 0.30, 0.70, 0.50][i],
+      baseY: [0.16, 0.26, 0.80, 0.62, 0.45][i],
+      radius: [0.52, 0.46, 0.44, 0.40, 0.34][i],
+      ax: 0.16 + i * 0.03,
+      ay: 0.12 + i * 0.025,
+      sx: 0.055 + i * 0.011,
+      sy: 0.042 + i * 0.009,
+      phase: i * 1.7,
+      rSpeed: 0.09 + i * 0.02
+    }));
+
+    const count = window.innerWidth < 640 ? 26 : 42;
+    particles = Array.from({ length: count }, () => newParticle(true));
+  }
+
+  function newParticle(spread){
+    return {
+      x: Math.random() * W,
+      y: spread ? Math.random() * H : H + 12,
+      r: Math.random() * 1.6 + 0.6,
+      v: Math.random() * 9 + 5,
+      drift: Math.random() * 0.6 + 0.2,
+      phase: Math.random() * Math.PI * 2,
+      a: Math.random() * 0.35 + 0.18
+    };
+  }
+
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = Math.floor(W * DPR);
+    canvas.height = Math.floor(H * DPR);
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    if (!blobs.length) build();
+  }
+
+  function frame(now){
+    if (!last) last = now;
+    let dt = (now - last) / 1000;
+    last = now;
+    if (dt > 0.06) dt = 0.06;
+    t += dt;
+
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = '#05070f';
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.globalCompositeOperation = 'lighter';
+    const minSide = Math.min(W, H);
+
+    for (const b of blobs){
+      const x = (b.baseX + Math.sin(t * b.sx + b.phase) * b.ax) * W;
+      const y = (b.baseY + Math.cos(t * b.sy + b.phase * 0.7) * b.ay) * H;
+      const breathe = 1 + Math.sin(t * b.rSpeed + b.phase) * 0.13;
+      const r = b.radius * minSide * breathe;
+      ctx.drawImage(b.sprite, x - r, y - r, r * 2, r * 2);
+    }
+
+    for (const p of particles){
+      p.y -= p.v * dt;
+      p.x += Math.sin(t * p.drift + p.phase) * 0.35;
+      if (p.y < -14){ Object.assign(p, newParticle(false)); }
+
+      const fade = Math.min(1, Math.max(0, (p.y / H) * 1.35)) * p.a;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, 6.28318);
+      ctx.fillStyle = 'rgba(226,220,255,' + fade.toFixed(3) + ')';
+      ctx.fill();
+    }
+
+    raf = requestAnimationFrame(frame);
+  }
+
+  function start(){ if (!raf && !reduceMotion){ last = 0; raf = requestAnimationFrame(frame); } }
+  function stop(){ if (raf){ cancelAnimationFrame(raf); raf = null; } }
+
+  resize();
+  build();
+
+  if (reduceMotion){
+    ctx.fillStyle = '#05070f';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'lighter';
+    for (const b of blobs){
+      const r = b.radius * Math.min(W, H);
+      ctx.drawImage(b.sprite, b.baseX * W - r, b.baseY * H - r, r * 2, r * 2);
+    }
+  } else {
+    start();
+  }
+
+  let rt;
+  window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(resize, 120); });
+  document.addEventListener('visibilitychange', () => { document.hidden ? stop() : start(); });
+})();
+
+/* ===== ПРИЛОЖЕНИЕ ===== */
 const API = 'https://vibeboost-2.onrender.com';
 const ICONS = {
   'Telegram':'telegram.svg','ВКонтакте':'vk.svg','Instagram':'instagram.svg',
@@ -193,39 +481,34 @@ const ICONS = {
 
 const $ = id => document.getElementById(id);
 const tg = window.Telegram?.WebApp;
-let services=[], network=null, category=null, selected=null, balance=0, busy=false, toastTimer;
+let services = [], network = null, category = null, selected = null, busy = false, toastTimer;
 
-// Функция сокрытия splash-экрана
-function hideSplash() {
+function hideSplash(){
   const s = $('splash');
-  if (s && !s.classList.contains('hide')) {
-    s.classList.add('hide');
-  }
+  if (s && !s.classList.contains('hide')) s.classList.add('hide');
 }
-
-// Гарантированно скрываем splash через 1.5 секунды максимум
 setTimeout(hideSplash, 1500);
 
-const money = n => Number(n).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2});
+const money = n => Number(n).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-function toast(s) {
+function toast(msg){
   const t = $('toast');
-  t.textContent = s;
+  t.textContent = msg;
   t.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.hidden = true, 4500);
+  toastTimer = setTimeout(() => { t.hidden = true; }, 4500);
 }
 
-function el(t, x, c) {
-  const e = document.createElement(t);
-  if (x !== undefined) e.textContent = x;
-  if (c) e.className = c;
+function el(tag, text, cls){
+  const e = document.createElement(tag);
+  if (text !== undefined) e.textContent = text;
+  if (cls) e.className = cls;
   return e;
 }
 
-function auth() {
+function auth(){
   if (tg?.initData && tg.initData.length > 0) return tg.initData;
-  if (location.hash && location.hash.length > 1) {
+  if (location.hash && location.hash.length > 1){
     const p = new URLSearchParams(location.hash.slice(1));
     const h = p.get('tgWebAppData');
     if (h) return h;
@@ -233,49 +516,49 @@ function auth() {
   return '';
 }
 
-async function api(path, payload) {
+async function api(path, payload){
   const r = await fetch(API + path, {
     method: 'POST',
-    headers: {'Content-Type': 'application/json'},
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
   const text = await r.text();
   let d;
-  try { d = JSON.parse(text); } catch { throw Error('Сервер вернул ошибку: ' + text.slice(0, 200)); }
+  try { d = JSON.parse(text); }
+  catch { throw Error('Сервер вернул некорректный ответ: ' + text.slice(0, 160)); }
   if (!r.ok || !d.ok) throw Error(d.error || ('HTTP ' + r.status));
   return d;
 }
 
-// Фоновая загрузка баланса (не блокирует показ каталога!)
-async function refreshBalance() {
+async function refreshBalance(){
   const cached = localStorage.getItem('vb_bal');
-  if (cached !== null) {
-    balance = Number(cached);
-    $('balance').textContent = money(balance) + ' ₽';
-  }
+  if (cached !== null) $('balance').textContent = money(Number(cached)) + ' ₽';
+
   const a = auth();
-  if (!a) {
+  if (!a){
     if (cached === null) $('balance').textContent = '0,00 ₽';
     return;
   }
+
   try {
     const d = await api('/api/user/info', { initData: a });
-    balance = Number(d.balance || 0);
-    $('balance').textContent = money(balance) + ' ₽';
-    localStorage.setItem('vb_bal', String(balance));
-  } catch (e) {
+    $('balance').textContent = money(Number(d.balance || 0)) + ' ₽';
+    localStorage.setItem('vb_bal', String(Number(d.balance || 0)));
+  } catch (e){
     if (cached === null) $('balance').textContent = '0,00 ₽';
     console.error('Баланс:', e);
   }
 }
 
-function card(title, sub, cb, net, price) {
+function card(title, sub, cb, net, price, index){
   const b = el('button', undefined, 'card');
   b.type = 'button';
-  if (net) {
-    const i = el('span', net.slice(0,2).toUpperCase(), 'icon');
+  b.style.animationDelay = (index * 0.045) + 's';
+
+  if (net){
+    const i = el('span', net.slice(0, 2).toUpperCase(), 'card-icon');
     const f = ICONS[net];
-    if (f) {
+    if (f){
       const im = new Image();
       im.alt = '';
       im.onload = () => i.replaceChildren(im);
@@ -283,74 +566,97 @@ function card(title, sub, cb, net, price) {
     }
     b.append(i);
   }
-  const info = el('span', undefined, 'info');
-  info.append(el('span', title, 'title'), el('span', sub, 'sub'));
-  if (price) info.append(el('span', price, 'price'));
-  b.append(info, el('span', '›', 'arrow'));
+
+  const info = el('span', undefined, 'card-info');
+  info.append(el('span', title, 'card-title'), el('span', sub, 'card-sub'));
+  if (price) info.append(el('span', price, 'card-price'));
+  b.append(info, el('span', '›', 'card-arrow'));
   b.onclick = cb;
+
+  b.addEventListener('mousemove', e => {
+    const r = b.getBoundingClientRect();
+    b.style.setProperty('--mx', (e.clientX - r.left) + 'px');
+    b.style.setProperty('--my', (e.clientY - r.top) + 'px');
+  });
+
   return b;
 }
 
-function render() {
+function render(){
   const q = $('search').value.trim().toLowerCase();
   const g = $('grid');
   g.replaceChildren();
   $('back').hidden = !network;
 
-  if (!network) {
-    const nets = [...new Set(services.map(s => s.network))].sort((a,b) => a.localeCompare(b,'ru'));
-    for (const n of nets.filter(n => n.toLowerCase().includes(q))) {
+  let i = 0;
+
+  if (!network){
+    const nets = [...new Set(services.map(s => s.network))].sort((a, b) => a.localeCompare(b, 'ru'));
+    for (const n of nets.filter(n => n.toLowerCase().includes(q))){
       const count = services.filter(s => s.network === n).length;
       g.append(card(n, 'Доступно услуг: ' + count, () => {
         network = n; category = null; $('search').value = ''; render();
-      }, n));
+      }, n, null, i++));
     }
-  } else if (!category) {
+  } else if (!category){
     const filtered = services.filter(s => s.network === network);
-    const cats = [...new Set(filtered.map(s => s.category))].sort((a,b) => a.localeCompare(b,'ru'));
-    for (const c of cats.filter(x => x.toLowerCase().includes(q))) {
+    const cats = [...new Set(filtered.map(s => s.category))].sort((a, b) => a.localeCompare(b, 'ru'));
+    for (const c of cats.filter(x => x.toLowerCase().includes(q))){
       const count = filtered.filter(s => s.category === c).length;
       g.append(card(c, 'Доступно услуг: ' + count, () => {
         category = c; $('search').value = ''; render();
-      }));
+      }, null, null, i++));
     }
   } else {
-    for (const s of services.filter(s => s.network === network && s.category === category && (s.name + ' ' + s.service).toLowerCase().includes(q))) {
-      g.append(card(s.name, 'ID ' + s.service + ' · ' + s.min + '–' + s.max, () => openOrder(s), null, money(Number(s.rate)) + ' ₽ / 1000'));
+    for (const s of services.filter(s =>
+      s.network === network &&
+      s.category === category &&
+      (s.name + ' ' + s.service).toLowerCase().includes(q)
+    )){
+      g.append(card(
+        s.name,
+        'ID ' + s.service + ' · ' + s.min + '–' + s.max + ' шт.',
+        () => openOrder(s),
+        null,
+        money(Number(s.rate)) + ' ₽ / 1000',
+        i++
+      ));
     }
   }
+
   $('counter').textContent = 'Показано: ' + g.children.length;
-  if (!g.children.length) g.append(el('p', 'Ничего не найдено', 'empty'));
+  if (!g.children.length) g.append(el('p', 'Ничего не найдено', 'empty-state'));
 }
 
-function openOrder(s) {
+function openOrder(s){
   selected = s;
   $('serviceName').textContent = s.name;
   $('serviceMeta').textContent = s.network + ' · ' + s.category + ' · ID ' + s.service;
-  $('description').textContent = s.description || 'Описание не предоставлено';
+  $('description').textContent = s.description || 'Описание услуги отсутствует.';
   $('link').value = '';
   $('quantity').min = s.min;
   $('quantity').max = s.max;
   $('quantity').value = s.min;
   $('limits').textContent = '(' + s.min + '–' + s.max + ')';
   $('orderStatus').textContent = '';
-  const subBtn = $('submit');
-  subBtn.disabled = false;
-  subBtn.textContent = 'Подтвердить заказ';
+
+  const btn = $('submit');
+  btn.disabled = false;
+  btn.innerHTML = '<span>Подтвердить заказ</span>';
+
   price();
   $('orderOverlay').hidden = false;
 }
 
-function price() {
+function price(){
   if (!selected) return;
   const raw = $('quantity').value;
   const q = Number(raw);
-  const isValid = /^\d+$/.test(raw) && Number.isSafeInteger(q) && q >= Number(selected.min) && q <= Number(selected.max);
-  $('quantity').setCustomValidity(isValid ? '' : ('Количество от ' + selected.min + ' до ' + selected.max));
-  $('total').textContent = isValid ? (money(Number(selected.rate) * q / 1000) + ' ₽') : '—';
+  const valid = /^\d+$/.test(raw) && Number.isSafeInteger(q) && q >= Number(selected.min) && q <= Number(selected.max);
+  $('quantity').setCustomValidity(valid ? '' : ('Количество от ' + selected.min + ' до ' + selected.max));
+  $('total').textContent = valid ? (money(Number(selected.rate) * q / 1000) + ' ₽') : '—';
 }
 
-// Оформление заказа с блокировкой от повторных нажатий
 $('orderForm').onsubmit = async e => {
   e.preventDefault();
   if (busy || !selected) return;
@@ -358,16 +664,16 @@ $('orderForm').onsubmit = async e => {
   if (!e.currentTarget.reportValidity()) return;
 
   const a = auth();
-  if (!a) {
-    $('orderStatus').textContent = 'Открой Mini App через Telegram.';
+  if (!a){
+    $('orderStatus').textContent = 'Откройте Mini App через бота в Telegram.';
     return;
   }
 
   busy = true;
-  const b = $('submit');
-  b.disabled = true;
-  b.innerHTML = '<span class="loading"><i class="spin"></i>Оформляем заказ…</span>';
-  $('orderStatus').textContent = 'Проверяем баланс и создаем заказ. Пожалуйста, подождите…';
+  const btn = $('submit');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin-wrap"><i class="spinner"></i>Оформляем заказ…</span>';
+  $('orderStatus').textContent = 'Проверяем баланс и создаём заказ. Пожалуйста, подождите…';
 
   try {
     const d = await api('/api/order', {
@@ -379,17 +685,20 @@ $('orderForm').onsubmit = async e => {
       }
     });
 
-    balance = Number(d.new_balance);
-    $('balance').textContent = money(balance) + ' ₽';
-    localStorage.setItem('vb_bal', String(balance));
+    const newBal = Number(d.new_balance);
+    $('balance').textContent = money(newBal) + ' ₽';
+    localStorage.setItem('vb_bal', String(newBal));
+
     $('orderStatus').textContent = '✅ Заказ успешно оформлен!';
-    toast('✅ Заказ оформлен!');
-    b.textContent = 'Заказ оформлен';
+    toast('✅ Заказ оформлен');
+    btn.innerHTML = '<span>Заказ принят</span>';
+    btn.disabled = true;
+
     setTimeout(() => { $('orderOverlay').hidden = true; }, 2000);
-  } catch (err) {
+  } catch (err){
     $('orderStatus').textContent = '❌ ' + err.message;
-    b.disabled = false;
-    b.textContent = 'Повторить заказ';
+    btn.disabled = false;
+    btn.innerHTML = '<span>Повторить заказ</span>';
   } finally {
     busy = false;
   }
@@ -401,9 +710,9 @@ $('openTopup').onclick = () => { $('topupOverlay').hidden = false; };
 $('closeTopup').onclick = () => { $('topupOverlay').hidden = true; };
 
 $('createTopup').onclick = async () => {
-  const b = $('createTopup');
-  b.disabled = true;
-  b.innerHTML = '<span class="loading"><i class="spin"></i>Отправляем…</span>';
+  const btn = $('createTopup');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin-wrap"><i class="spinner"></i>Отправляем…</span>';
   try {
     const d = await api('/api/topup', {
       initData: auth(),
@@ -412,11 +721,11 @@ $('createTopup').onclick = async () => {
     });
     $('topupStatus').textContent = '✅ ' + d.message;
     toast('Запрос отправлен администратору');
-  } catch (e) {
+  } catch (e){
     $('topupStatus').textContent = '❌ ' + e.message;
   } finally {
-    b.disabled = false;
-    b.textContent = 'Создать запрос';
+    btn.disabled = false;
+    btn.innerHTML = '<span>Создать запрос</span>';
   }
 };
 
@@ -424,25 +733,25 @@ $('search').oninput = render;
 $('home').onclick = () => { network = null; category = null; $('search').value = ''; render(); };
 $('back').onclick = () => { if (category) category = null; else network = null; $('search').value = ''; render(); };
 
-tg?.ready();
-tg?.expand();
+try { tg?.ready(); tg?.expand(); } catch (e) { console.error(e); }
 
-// Загрузка каталога и параллельный запрос баланса
 (async () => {
   try {
     const r = await fetch('./services.json?v=' + Date.now());
     if (!r.ok) throw Error('Каталог недоступен');
-    services = await r.json();
-    if (!Array.isArray(services) || !services.length) throw Error('Каталог пуст');
-    services = services.map(s => ({
+    const data = await r.json();
+    if (!Array.isArray(data) || !data.length) throw Error('Каталог пуст');
+
+    services = data.map(s => ({
       ...s,
       network: String(s.network || 'Без сети'),
       category: String(s.category || 'Прочее'),
       name: String(s.name || 'Услуга')
     }));
+
     render();
-  } catch (e) {
-    $('grid').append(el('p', e.message, 'empty'));
+  } catch (e){
+    $('grid').append(el('p', e.message, 'empty-state'));
     toast(e.message);
   } finally {
     hideSplash();
