@@ -8,479 +8,279 @@
 <style>
 :root{
   color-scheme:dark;
-  --bg:#050711;
-  --panel:rgba(18,24,42,0.72);
-  --glass:rgba(255,255,255,0.055);
-  --line:rgba(255,255,255,0.08);
-  --line-active:rgba(142,98,255,0.45);
-  --text:#f4f5ff;
-  --muted:#8e9cb9;
-  --accent:#8e62ff;
-  --cyan:#3fe0ff;
-  --green:#4ff3a6;
-  --red:#ff5c7a;
+  --bg:#070b18;
+  --panel:#11182b;
+  --panel2:#18223b;
+  --line:rgba(255,255,255,0.09);
+  --text:#f4f3ff;
+  --muted:#9ca8c5;
+  --accent:#9b7cff;
+  --cyan:#55d9ff;
+  --green:#65e6a1;
+  --red:#ff7185;
+  --amber:#ffbe55;
 }
-*{box-sizing:border-box}
-html,body{margin:0;min-height:100%;background:var(--bg)}
-body{
-  font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-  color:var(--text);overflow-x:hidden;-webkit-font-smoothing:antialiased;
-}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;min-height:100%;font:15px/1.5 -apple-system,BlinkMacSystemFont,Inter,system-ui,sans-serif;color:var(--text);background:var(--bg)}
+body{overflow-x:hidden}
 
-/* Оптимизированный плавный canvas (DPR=1, легкие спрайты) */
-canvas#bgCanvas{position:fixed;inset:0;width:100%;height:100%;z-index:0;display:block;pointer-events:none}
-.vignette{position:fixed;inset:0;z-index:1;pointer-events:none;background:radial-gradient(ellipse at 50% 20%,transparent 35%,rgba(3,5,14,.65) 100%)}
-.app{position:relative;z-index:2}
+#bgCanvas{position:fixed;inset:0;z-index:-1;width:100%;height:100%;pointer-events:none}
 
-/* Header */
-header{
-  position:sticky;top:0;z-index:40;padding:11px 18px;
-  background:rgba(6,9,19,0.75);
-  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
-  border-bottom:1px solid var(--line);
-}
-.header-row{max-width:1000px;margin:auto;display:flex;align-items:center;justify-content:space-between;gap:12px}
-.logo-btn{border:0;background:none;color:#fff;font-size:23px;font-weight:900;letter-spacing:-.6px;cursor:pointer;padding:0}
-.logo-btn span{
-  background:linear-gradient(115deg,#a97dff,#3fe0ff,#a97dff);background-size:220% auto;
-  -webkit-background-clip:text;background-clip:text;color:transparent;
-  animation:shimmer 5s linear infinite;
-}
-@keyframes shimmer{to{background-position:220% center}}
+header{position:sticky;top:0;z-index:20;padding:10px 14px;background:rgba(8,13,27,0.86);border-bottom:1px solid var(--line);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.header{max-width:1000px;margin:auto;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.logo{border:0;background:none;color:#fff;font-size:22px;font-weight:900;letter-spacing:-0.5px;cursor:pointer;padding:0;flex-shrink:0}
+.logo span{color:var(--accent)}
 
-.balance-pill{
-  display:flex;align-items:center;gap:9px;padding:6px 13px;border:1px solid var(--line);border-radius:999px;
-  background:rgba(255,255,255,0.04);box-shadow:0 4px 18px rgba(0,0,0,0.3);
-  transition:border-color .2s;
-}
-.balance-pill:hover{border-color:var(--line-active)}
-.bal-label{color:var(--muted);font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase}
-.bal-val{font-weight:800;color:var(--green);white-space:nowrap;font-size:14px;text-shadow:0 0 12px rgba(79,243,166,0.3)}
-.plus-btn{
-  width:26px;height:26px;border:0;border-radius:50%;color:#fff;
-  background:linear-gradient(135deg,#8e62ff,#5231db);font-size:17px;font-weight:700;line-height:1;
-  display:grid;place-items:center;cursor:pointer;box-shadow:0 0 14px rgba(142,98,255,0.5);
-  transition:transform .15s,box-shadow .2s;
-}
-.plus-btn:hover{box-shadow:0 0 22px rgba(142,98,255,0.8)}
-.plus-btn:active{transform:scale(.88)}
+.head-actions{display:flex;align-items:center;gap:8px}
+.orders-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 11px;border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,0.05);color:var(--text);font-size:12px;font-weight:700;cursor:pointer;transition:transform .15s,border-color .15s}
+.orders-btn:active{transform:scale(0.95)}
+.orders-badge{padding:1px 6px;border-radius:999px;background:rgba(155,124,255,0.22);color:#d7cbff;font-size:11px;font-weight:800}
 
-.wrap{max-width:1000px;margin:auto;padding:16px 16px 70px}
-.hero{padding:10px 0 18px}
-.badge-tag{
-  display:inline-flex;align-items:center;gap:7px;padding:5px 12px;
-  border:1px solid rgba(169,130,255,0.28);border-radius:999px;background:rgba(142,98,255,0.08);
-  color:#d4c6ff;font-size:10.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;
-}
-.badge-dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green)}
-.hero h1{
-  font-size:clamp(28px,5.8vw,44px);line-height:1.08;letter-spacing:-1.2px;margin:12px 0 8px;font-weight:900;
-}
-.hero h1 span{
-  background:linear-gradient(110deg,#fff,#c3a8ff 45%,#3fe0ff);
-  -webkit-background-clip:text;background-clip:text;color:transparent;
-}
-.hero p{margin:0;color:var(--muted);font-size:14px;max-width:520px}
+.balance{display:flex;align-items:center;gap:7px;padding:5px 10px;border:1px solid rgba(255,255,255,0.12);border-radius:999px;background:linear-gradient(135deg,rgba(255,255,255,0.08),rgba(255,255,255,0.02))}
+.balance small{color:var(--muted);font-size:11px}
+.bal{font-weight:800;color:var(--green);white-space:nowrap;font-size:13px}
+.plus{width:25px;height:25px;border:0;border-radius:50%;color:#fff;background:linear-gradient(135deg,var(--accent),#6040d8);font-size:17px;line-height:1;display:grid;place-items:center;cursor:pointer;box-shadow:0 0 12px rgba(141,108,255,0.45);transition:transform .15s}
+.plus:active{transform:scale(0.9)}
 
-/* Поиск */
-.search-container{position:relative;margin:16px 0 20px}
-.search-wrapper{
-  position:relative;display:flex;align-items:center;
-  background:rgba(255,255,255,0.045);border:1px solid var(--line);border-radius:16px;
-  transition:border-color .2s,box-shadow .2s;
-}
-.search-wrapper:focus-within{
-  border-color:rgba(142,98,255,0.6);box-shadow:0 0 0 3px rgba(142,98,255,0.15);
-}
-.search-icon{padding-left:16px;color:var(--muted);font-size:15px;pointer-events:none}
-.search-input{
-  flex:1;min-width:0;padding:13px 14px;border:0;background:none;color:var(--text);
-  outline:0;font-size:14px;
-}
-.search-input::placeholder{color:#6c7896}
-.search-clear{
-  border:0;background:none;color:var(--muted);font-size:17px;cursor:pointer;
-  padding:8px 14px;display:none;line-height:1;
-}
-.search-clear.show{display:block}
+.wrap{max-width:1000px;margin:auto;padding:18px 14px 60px}
+.hero{padding:4px 0 18px}
+.eyebrow{display:inline-flex;padding:4px 10px;border:1px solid rgba(169,140,255,0.25);border-radius:999px;color:#c8bbff;background:rgba(155,124,255,0.08);font-size:11px;letter-spacing:.8px;text-transform:uppercase;font-weight:700}
+.hero h1{font-size:clamp(26px,5vw,42px);line-height:1.1;letter-spacing:-1px;margin:10px 0 6px;font-weight:900}
+.hero h1 span{background:linear-gradient(100deg,#fff,#a98cff 55%,#59dfff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero p{margin:0;color:var(--muted);font-size:14px}
 
-/* Заголовок секции результатов */
-.section-title{
-  display:flex;justify-content:space-between;align-items:center;margin:0 0 12px;
-  font-size:14px;font-weight:700;color:var(--muted);
-}
-.section-title span{color:var(--accent)}
+.tools{display:flex;gap:10px;align-items:center;margin:14px 0 10px}
+.search-wrap{position:relative;flex:1;min-width:0}
+.search{width:100%;padding:12px 38px 12px 14px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,0.05);color:var(--text);outline:0;font-size:14px;transition:border-color .2s}
+.search:focus{border-color:rgba(155,124,255,0.65)}
+.clear-btn{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:26px;height:26px;border:0;border-radius:50%;background:rgba(255,255,255,0.1);color:var(--muted);font-size:13px;cursor:pointer;display:grid;place-items:center}
+.counter{color:var(--muted);font-size:12px;white-space:nowrap}
 
-/* Карточки */
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(255px,1fr));gap:12px}
-.card{
-  position:relative;display:flex;align-items:center;gap:14px;width:100%;min-height:86px;padding:15px 17px;
-  text-align:left;color:var(--text);border:1px solid var(--line);border-radius:18px;
-  background:linear-gradient(135deg,rgba(255,255,255,0.05),rgba(255,255,255,0.015));
-  box-shadow:0 8px 24px rgba(0,0,0,0.22);
-  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
-  overflow:hidden;cursor:pointer;
-  transition:transform .18s ease,border-color .2s,box-shadow .2s;
-}
-.card:hover{transform:translateY(-2px);border-color:rgba(169,130,255,0.45);box-shadow:0 12px 30px rgba(108,58,255,0.18)}
-.card:active{transform:scale(.985)}
-.card-icon{
-  display:grid;place-items:center;flex:0 0 46px;width:46px;height:46px;border-radius:14px;
-  background:linear-gradient(135deg,rgba(142,98,255,0.22),rgba(63,224,255,0.12));
-  border:1px solid rgba(255,255,255,0.12);color:#d9ccff;font-weight:900;font-size:14px;
-}
-.card-icon img{width:40px;height:40px;object-fit:contain}
-.card-info{flex:1;min-width:0}
-.card-title{display:block;font-weight:800;font-size:14.5px;line-height:1.25;overflow-wrap:anywhere}
-.card-sub{display:block;color:var(--muted);font-size:11.5px;margin-top:3px}
-.card-price-block{text-align:right;flex-shrink:0;padding-left:8px}
-.card-price{display:block;color:#d5c8ff;font-weight:800;font-size:13px;white-space:nowrap}
-.card-unit{display:block;color:var(--muted);font-size:10px;margin-top:1px}
-.card-arrow{color:#7683a3;font-size:20px;padding-left:4px;transition:transform .2s}
-.card:hover .card-arrow{transform:translateX(3px);color:#fff}
+.quick-results{margin:6px 0 18px;border:1px solid rgba(155,124,255,0.25);border-radius:16px;background:rgba(14,20,38,0.92);overflow:hidden;box-shadow:0 12px 32px rgba(0,0,0,0.45)}
+.qr-head{padding:8px 14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#b9a8ff;background:rgba(155,124,255,0.08);border-bottom:1px solid var(--line);display:flex;justify-content:space-between}
+.qr-item{display:flex;align-items:center;gap:11px;width:100%;padding:11px 14px;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--text);text-align:left;cursor:pointer;transition:background .15s}
+.qr-item:last-child{border-bottom:0}
+.qr-item:active{background:rgba(155,124,255,0.14)}
+.qr-icon{width:34px;height:34px;flex:0 0 34px;border-radius:10px;display:grid;place-items:center;background:rgba(255,255,255,0.06);border:1px solid var(--line);font-size:11px;font-weight:800;color:#d5caff}
+.qr-icon img{width:22px;height:22px;object-fit:contain}
+.qr-info{flex:1;min-width:0}
+.qr-name{display:block;font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.qr-net{display:block;font-size:11px;color:var(--muted)}
+.qr-price{text-align:right;flex-shrink:0}
+.qr-price strong{display:block;font-size:13px;color:#d2c4ff;font-weight:800}
+.qr-price small{display:block;font-size:10px;color:var(--muted)}
 
-.back-btn{
-  border:1px solid var(--line);border-radius:13px;padding:9px 14px;background:rgba(255,255,255,0.05);
-  color:var(--text);cursor:pointer;margin-bottom:12px;font-weight:700;font-size:13px;
-  display:inline-flex;align-items:center;gap:7px;transition:border-color .2s;
-}
-.back-btn:hover{border-color:var(--accent)}
-.empty-state{padding:34px 20px;color:var(--muted);text-align:center;font-size:14px}
-.footer-text{margin-top:38px;color:#596480;font-size:11.5px;text-align:center}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(265px,1fr));gap:11px}
+.card{position:relative;display:flex;align-items:center;gap:12px;width:100%;min-height:84px;padding:15px;text-align:left;color:var(--text);border:1px solid var(--line);border-radius:18px;background:linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.015));box-shadow:0 8px 22px rgba(0,0,0,0.22);overflow:hidden;cursor:pointer;transition:transform .16s,border-color .16s}
+.card:active{transform:scale(0.98)}
+.icon{display:grid;place-items:center;flex:0 0 44px;width:44px;height:44px;border-radius:13px;background:linear-gradient(135deg,rgba(155,124,255,0.22),rgba(85,217,255,0.1));border:1px solid var(--line);color:#d5caff;font-weight:900;font-size:13px}
+.icon img{width:28px;height:28px;object-fit:contain}
+.info{flex:1;min-width:0}
+.title{display:block;font-weight:800;font-size:14px;overflow-wrap:anywhere}
+.sub{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+.price-box{text-align:right;flex-shrink:0;margin-left:6px}
+.price{display:block;color:#c6b8ff;font-weight:800;font-size:14px}
+.price-unit{display:block;color:var(--muted);font-size:10px}
+.arrow{color:#8f9bb8;font-size:20px;margin-left:2px}
 
-/* Модалки */
-.overlay{
-  position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;padding:16px;
-  background:rgba(2,4,12,0.8);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
-}
-.sheet{
-  width:100%;max-width:520px;max-height:90dvh;overflow:auto;padding:22px;
-  border:1px solid rgba(255,255,255,0.12);border-radius:24px;
-  background:linear-gradient(155deg,#151d34 0%,#090e1d 100%);
-  box-shadow:0 30px 90px rgba(0,0,0,0.85);
-}
-.sheet-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px}
-.sheet-head h2{margin:0;font-size:19px;font-weight:900}
-.close-btn{
-  width:32px;height:32px;flex:0 0 32px;border-radius:50%;border:1px solid var(--line);
-  background:rgba(255,255,255,0.05);color:var(--muted);font-size:15px;
-  display:grid;place-items:center;cursor:pointer;
-}
-.close-btn:hover{color:#fff;border-color:rgba(255,255,255,0.3)}
-.sheet-desc{
-  max-height:120px;overflow:auto;white-space:pre-wrap;margin:12px 0;padding:11px 13px;
-  border-radius:13px;border:1px solid rgba(255,255,255,0.05);
-  background:rgba(0,0,0,0.35);color:var(--muted);font-size:12.5px;line-height:1.45;
-}
-.sheet-meta{color:var(--muted);font-size:12px;margin-top:3px}
-label{display:block;margin:13px 0 6px;font-size:12.5px;color:#ccd3e6;font-weight:700}
-.field{
-  width:100%;padding:12px 15px;border:1px solid var(--line);border-radius:13px;
-  background:rgba(0,0,0,0.32);color:var(--text);outline:0;font-size:14px;
-  transition:border-color .2s;
-}
-.field:focus{border-color:rgba(142,98,255,0.7)}
+.back{border:1px solid var(--line);border-radius:12px;padding:8px 13px;background:rgba(255,255,255,0.05);color:var(--text);cursor:pointer;margin-bottom:10px;font-weight:600;font-size:13px}
+.footer{margin-top:34px;color:#74809e;font-size:12px;text-align:center;display:flex;flex-direction:column;gap:8px;align-items:center}
+.support-link{border:1px solid var(--line);background:rgba(255,255,255,0.04);color:#c8bbff;padding:8px 14px;border-radius:12px;font-size:12px;font-weight:600;cursor:pointer}
 
-.price-calc-box{
-  margin:16px 0;padding:14px 16px;border-radius:15px;border:1px solid rgba(255,255,255,0.08);
-  background:linear-gradient(115deg,rgba(142,98,255,0.18),rgba(63,224,255,0.08));
-}
-.calc-row{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:var(--muted);margin-bottom:6px}
-.calc-row.total-row{margin:8px 0 0;padding-top:8px;border-top:1px solid rgba(255,255,255,0.08);font-size:14.5px;font-weight:800;color:var(--text)}
-.calc-val{color:#5ce6ff;font-size:17px;font-weight:900}
+.overlay{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:14px;background:rgba(2,5,17,0.86);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.modal{width:100%;max-width:500px;max-height:90dvh;overflow:auto;padding:20px;border:1px solid rgba(255,255,255,0.12);border-radius:22px;background:linear-gradient(145deg,#151e35,#0d1425);box-shadow:0 25px 70px rgba(0,0,0,0.8)}
+.modalhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.modal h2{margin:0;font-size:19px;font-weight:800}
+.close{border:0;background:none;color:var(--muted);font-size:26px;line-height:1;cursor:pointer;padding:0 4px}
+.desc{max-height:130px;overflow:auto;white-space:pre-wrap;margin:10px 0;padding:11px;border-radius:12px;background:#050a16;color:var(--muted);font-size:13px}
+.meta{color:var(--muted);font-size:12px;margin-top:2px}
+label{display:block;margin:12px 0 5px;font-size:13px;color:#c6cce0;font-weight:600}
+.field{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:12px;background:#080e1c;color:var(--text);outline:0;font-size:14px}
+.field:focus{border-color:var(--accent)}
+textarea.field{min-height:90px;resize:vertical;font-family:inherit}
 
-/* Блок ошибки внутри модалки */
-.err-box{
-  display:none;margin-top:12px;padding:12px 14px;border-radius:14px;
-  background:rgba(255,92,122,0.12);border:1px solid rgba(255,92,122,0.35);
-  color:#ffd2dc;font-size:13px;line-height:1.4;
-}
-.err-box.show{display:block}
-.err-box strong{display:block;color:#ff839a;margin-bottom:3px}
-.err-code{
-  display:inline-block;margin-top:5px;padding:2px 8px;border-radius:6px;
-  background:rgba(0,0,0,0.35);color:#fff;font-family:monospace;font-size:11.5px;
-}
-.err-btn-wrap{margin-top:10px}
+.price-summary{margin:14px 0;padding:12px 14px;border-radius:14px;background:linear-gradient(120deg,#2c1d52,#162642);border:1px solid rgba(155,124,255,0.22);display:flex;flex-direction:column;gap:6px}
+.price-row{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#c5cde3}
+.price-row.main{font-size:16px;font-weight:800;color:#fff;padding-top:6px;border-top:1px solid rgba(255,255,255,0.1)}
 
-/* Кнопка заказа */
-.glow-btn{
-  position:relative;width:100%;padding:13px;border:0;border-radius:15px;overflow:hidden;
-  background:linear-gradient(110deg,#7c4fff,#a45aff 35%,#3fe0ff 70%,#7c4fff 100%);
-  background-size:300% auto;color:#fff;font-weight:800;font-size:15px;cursor:pointer;
-  box-shadow:0 8px 26px rgba(142,98,255,0.38);
-  transition:transform .15s,box-shadow .2s;
-  animation:btnFlow 6s linear infinite;
-}
-@keyframes btnFlow{to{background-position:300% center}}
-.glow-btn:hover{transform:translateY(-1px);box-shadow:0 12px 32px rgba(142,98,255,0.55)}
-.glow-btn:active{transform:scale(.98)}
-.glow-btn:disabled{opacity:.62;cursor:not-allowed;transform:none}
-.spin-wrap{display:inline-flex;align-items:center;gap:8px}
-.spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin .65s linear infinite}
+.primary{position:relative;overflow:hidden;width:100%;padding:13px;border:0;border-radius:13px;background:linear-gradient(110deg,#7957e8,#ae6dec);color:#fff;font-weight:800;font-size:15px;cursor:pointer;box-shadow:0 6px 18px rgba(141,108,255,0.3);transition:transform .15s,opacity .15s}
+.primary:active{transform:scale(0.98)}
+.primary:disabled{opacity:.65;cursor:not-allowed;transform:none}
+.secondary-btn{width:100%;margin-top:8px;padding:11px;border:1px solid rgba(101,230,161,0.4);border-radius:12px;background:rgba(101,230,161,0.12);color:var(--green);font-weight:700;font-size:13px;cursor:pointer}
+
+.err-box{margin-top:12px;padding:11px 13px;border-radius:12px;background:rgba(255,113,133,0.12);border:1px solid rgba(255,113,133,0.35);color:#ffd5dc;font-size:13px;line-height:1.45}
+.err-code{display:inline-block;margin-top:6px;padding:2px 7px;border-radius:6px;background:rgba(0,0,0,0.35);color:#ff9aa8;font-family:monospace;font-size:11px}
+.ok-box{margin-top:12px;padding:11px 13px;border-radius:12px;background:rgba(101,230,161,0.12);border:1px solid rgba(101,230,161,0.35);color:#c8ffe0;font-size:13px}
+
+/* Список заказов */
+.orders-list{display:flex;flex-direction:column;gap:10px;margin-top:6px}
+.order-card{padding:13px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,0.035)}
+.order-top{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}
+.order-id{font-weight:800;font-size:13px;color:#d5caff}
+.order-status{padding:3px 9px;border-radius:999px;font-size:11px;font-weight:700;background:rgba(101,230,161,0.15);color:var(--green)}
+.order-status.proc{background:rgba(85,217,255,0.15);color:var(--cyan)}
+.order-title{font-weight:700;font-size:14px;margin-bottom:4px}
+.order-link{font-size:12px;color:var(--muted);word-break:break-all;margin-bottom:6px}
+.order-foot{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted);padding-top:6px;border-top:1px solid rgba(255,255,255,0.06)}
+.order-foot strong{color:#fff;font-size:13px}
+
+.loading{display:inline-flex;align-items:center;gap:8px}
+.spin{width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-/* Toast */
-#toast{
-  position:fixed;left:50%;bottom:24px;z-index:200;transform:translateX(-50%);
-  max-width:92vw;padding:12px 18px;font-size:13px;font-weight:600;white-space:pre-wrap;
-  border:1px solid rgba(169,130,255,0.4);border-radius:14px;
-  background:rgba(18,14,34,0.96);backdrop-filter:blur(14px);color:#fff;
-  box-shadow:0 12px 35px rgba(0,0,0,0.6);
-}
+#toast{position:fixed;left:50%;bottom:20px;z-index:300;transform:translateX(-50%);max-width:92vw;padding:11px 16px;border:1px solid rgba(155,124,255,0.4);border-radius:12px;background:#17132b;color:#fff;box-shadow:0 10px 28px rgba(0,0,0,0.6);font-size:13px;white-space:pre-wrap}
 
-/* Splash */
-.splash{position:fixed;inset:0;z-index:300;display:grid;place-items:center;background:#050711;transition:opacity .35s,visibility .35s}
+.splash{position:fixed;inset:0;z-index:500;display:grid;place-items:center;background:#070b18;transition:opacity .3s,visibility .3s}
 .splash.hide{opacity:0;visibility:hidden;pointer-events:none}
-.splash-inner{text-align:center}
-.splash-title{font-size:30px;font-weight:900;letter-spacing:-.8px}
-.splash-title span{background:linear-gradient(115deg,#a97dff,#3fe0ff);-webkit-background-clip:text;background-clip:text;color:transparent}
-.splash-ring{
-  width:42px;height:42px;margin:18px auto 12px;border-radius:50%;
-  border:3px solid rgba(255,255,255,0.08);border-top-color:#8e62ff;border-right-color:#3fe0ff;
-  animation:spin .8s linear infinite;
-}
-.splash-text{color:var(--muted);font-size:12px}
-
+.splashbox{text-align:center}
+.splashlogo{font-size:32px;font-weight:900;letter-spacing:-1px}
+.splashlogo span{color:var(--accent)}
+.loader{width:38px;height:38px;margin:16px auto;border:3px solid rgba(255,255,255,0.1);border-top-color:var(--accent);border-right-color:var(--cyan);border-radius:50%;animation:spin .8s linear infinite}
+.splashtext{color:var(--muted);font-size:13px}
+.empty{color:var(--muted);text-align:center;padding:24px 0;grid-column:1/-1}
 [hidden]{display:none!important}
-@media(max-width:600px){
-  .wrap{padding:14px 14px 60px}
-  .hero h1{font-size:30px}
-  .bal-label{display:none}
-  .sheet{padding:18px;border-radius:20px}
-}
 </style>
 </head>
 <body>
 
 <canvas id="bgCanvas"></canvas>
-<div class="vignette"></div>
 
 <div class="splash" id="splash">
-  <div class="splash-inner">
-    <div class="splash-title">Vibe<span>Boost</span></div>
-    <div class="splash-ring"></div>
-    <div class="splash-text">Загружаем каталог…</div>
+  <div class="splashbox">
+    <div class="splashlogo">Vibe<span>Boost</span></div>
+    <div class="loader"></div>
+    <div class="splashtext">Запуск приложения…</div>
   </div>
 </div>
 
-<div class="app">
-  <header>
-    <div class="header-row">
-      <button class="logo-btn" id="home">Vibe<span>Boost</span></button>
-      <div class="balance-pill">
-        <span class="bal-label">Баланс</span>
-        <span class="bal-val" id="balance">… ₽</span>
-        <button class="plus-btn" id="openTopup" aria-label="Пополнить">+</button>
+<header>
+  <div class="header">
+    <button class="logo" id="home">Vibe<span>Boost</span></button>
+    <div class="head-actions">
+      <button class="orders-btn" id="openOrders" type="button">
+        Заказы <span class="orders-badge" id="ordersCount">0</span>
+      </button>
+      <div class="balance">
+        <small>Баланс</small>
+        <span class="bal" id="balance">… ₽</span>
+        <button class="plus" id="openTopup" aria-label="Пополнить">+</button>
       </div>
     </div>
-  </header>
+  </div>
+</header>
 
-  <main class="wrap">
-    <section class="hero">
-      <div class="badge-tag"><span class="badge-dot"></span> Продвижение нового уровня</div>
-      <h1>Выбирай.<br><span>Запускай результат.</span></h1>
-      <p>Услуги для быстрого и безопасного роста твоих социальных сетей.</p>
-    </section>
+<main class="wrap">
+  <section class="hero">
+    <div class="eyebrow">Продвижение нового уровня</div>
+    <h1>Выбирай.<br><span>Запускай результат.</span></h1>
+    <p>Услуги для роста твоих социальных сетей — быстро, удобно и в одном месте.</p>
+  </section>
 
-    <!-- Поиск со сбросом -->
-    <div class="search-container">
-      <div class="search-wrapper">
-        <span class="search-icon">🔍</span>
-        <input class="search-input" id="search" type="search" placeholder="Поиск: подписчики, лайки, telegram, id…">
-        <button class="search-clear" id="searchClear" aria-label="Очистить">✕</button>
-      </div>
+  <button class="back" id="back" hidden>← Назад</button>
+
+  <div class="tools">
+    <div class="search-wrap">
+      <input class="search" id="search" type="text" autocomplete="off" placeholder="Поиск по всем услугам (подписчики, лайки, Telegram…)">
+      <button class="clear-btn" id="clearSearch" type="button" hidden>✕</button>
     </div>
-
-    <button class="back-btn" id="back" hidden>← Назад</button>
-
-    <div class="section-title" id="sectionTitle">
-      <span id="sectionTitleText">Категории</span>
-      <small id="counter"></small>
-    </div>
-
-    <div class="grid" id="grid"></div>
-    <div class="footer-text">Оплата моментально списывается с баланса профиля</div>
-  </main>
-
-  <!-- Модалка заказа -->
-  <div class="overlay" id="orderOverlay" hidden>
-    <section class="sheet">
-      <div class="sheet-head">
-        <h2>Оформление заказа</h2>
-        <button class="close-btn" id="closeOrder">✕</button>
-      </div>
-      <strong id="serviceName" style="font-size:15px"></strong>
-      <div class="sheet-meta" id="serviceMeta"></div>
-      <div class="sheet-desc" id="description"></div>
-
-      <form id="orderForm">
-        <label for="link">Ссылка на страницу / канал / @username</label>
-        <input class="field" id="link" required maxlength="700" placeholder="https://… или @username">
-
-        <label for="quantity">Количество <span class="sheet-meta" id="limits"></span></label>
-        <input class="field" id="quantity" type="number" step="1" required>
-
-        <div class="price-calc-box">
-          <div class="calc-row">
-            <span>Цена за 1 шт.:</span>
-            <strong id="unitPriceLabel">—</strong>
-          </div>
-          <div class="calc-row total-row">
-            <span>Итого к списанию:</span>
-            <span class="calc-val" id="total">—</span>
-          </div>
-        </div>
-
-        <button class="glow-btn" id="submit" type="submit"><span>Подтвердить заказ</span></button>
-
-        <!-- Блок понятной ошибки для пользователя -->
-        <div class="err-box" id="orderErrBox">
-          <strong id="errTitle">Ошибка</strong>
-          <span id="errDesc"></span>
-          <div id="errCodeBadge"></div>
-          <div class="err-btn-wrap" id="errTopupBtnWrap" hidden>
-            <button type="button" class="back-btn" id="errTopupBtn" style="margin-top:8px;width:100%;justify-content:center">Пополнить баланс +</button>
-          </div>
-        </div>
-      </form>
-    </section>
+    <span class="counter" id="counter"></span>
   </div>
 
-  <!-- Модалка пополнения -->
-  <div class="overlay" id="topupOverlay" hidden>
-    <section class="sheet">
-      <div class="sheet-head">
-        <h2>Пополнение баланса</h2>
-        <button class="close-btn" id="closeTopup">✕</button>
-      </div>
-      <p class="sheet-meta" style="margin-top:0">Укажите сумму перевода. Администратор проверит и зачислит средства.</p>
+  <!-- Быстрые предложения услуг по всем соцсетям -->
+  <div class="quick-results" id="quickResults" hidden></div>
 
-      <label for="topupAmount">Сумма, ₽</label>
-      <input class="field" id="topupAmount" type="number" min="10" max="100000" value="100">
+  <div class="grid" id="grid"></div>
 
-      <label for="topupMethod">Способ оплаты</label>
-      <select class="field" id="topupMethod">
-        <option value="sbp">СБП / Банковская карта РФ</option>
-        <option value="crypto">Криптовалюта (USDT / TON / BTC)</option>
-        <option value="other">Другой способ</option>
-      </select>
-
-      <button class="glow-btn" id="createTopup" style="margin-top:18px"><span>Создать запрос</span></button>
-
-      <div class="err-box" id="topupErrBox">
-        <strong id="topupErrTitle"></strong>
-        <span id="topupErrDesc"></span>
-      </div>
-    </section>
+  <div class="footer">
+    <span>Безопасная оплата с баланса профиля</span>
+    <button class="support-link" id="openSupport" type="button">Написать администратору</button>
   </div>
+</main>
 
-  <div id="toast" hidden></div>
+<!-- Модалка заказа -->
+<div class="overlay" id="orderOverlay" hidden>
+  <section class="modal">
+    <div class="modalhead">
+      <h2>Оформление заказа</h2>
+      <button class="close" id="closeOrder">×</button>
+    </div>
+    <strong id="serviceName" style="font-size:15px"></strong>
+    <div class="meta" id="serviceMeta"></div>
+    <div class="desc" id="description"></div>
+    <form id="orderForm">
+      <label for="link">Ссылка / username</label>
+      <input class="field" id="link" required maxlength="700" placeholder="https://… или @username">
+      <label for="quantity">Количество <span class="meta" id="limits"></span></label>
+      <input class="field" id="quantity" type="number" step="1" required>
+
+      <div class="price-summary">
+        <div class="price-row">
+          <span>Цена за 1 шт.:</span>
+          <strong id="unitPrice">—</strong>
+        </div>
+        <div class="price-row main">
+          <span>Итого к оплате:</span>
+          <strong id="total" style="color:#d5caff">—</strong>
+        </div>
+      </div>
+
+      <button class="primary" id="submit" type="submit">Подтвердить заказ</button>
+      <div id="orderStatus"></div>
+    </form>
+  </section>
 </div>
+
+<!-- Модалка списка заказов -->
+<div class="overlay" id="ordersOverlay" hidden>
+  <section class="modal">
+    <div class="modalhead">
+      <h2>Мои заказы</h2>
+      <button class="close" id="closeOrders">×</button>
+    </div>
+    <div id="ordersList" class="orders-list"></div>
+  </section>
+</div>
+
+<!-- Модалка пополнения -->
+<div class="overlay" id="topupOverlay" hidden>
+  <section class="modal">
+    <div class="modalhead">
+      <h2>Пополнение баланса</h2>
+      <button class="close" id="closeTopup">×</button>
+    </div>
+    <p class="meta" style="margin-top:0">Выбери сумму для пополнения счёта:</p>
+    <label for="topupAmount">Сумма, ₽</label>
+    <input class="field" id="topupAmount" type="number" min="10" max="100000" value="100">
+    <label for="topupMethod">Способ оплаты</label>
+    <select class="field" id="topupMethod">
+      <option value="sbp">СБП / Банковская карта РФ</option>
+      <option value="crypto">Криптовалюта (USDT / TON)</option>
+      <option value="other">Другой способ</option>
+    </select>
+    <button class="primary" id="createTopup" style="margin-top:16px">Создать запрос</button>
+    <div id="topupStatus"></div>
+  </section>
+</div>
+
+<!-- Модалка сообщения администратору -->
+<div class="overlay" id="supportOverlay" hidden>
+  <section class="modal">
+    <div class="modalhead">
+      <h2>Сообщение администратору</h2>
+      <button class="close" id="closeSupport">×</button>
+    </div>
+    <p class="meta" style="margin-top:0">Опиши вопрос или приложи код ошибки, если возникла проблема:</p>
+    <label for="supportText">Текст сообщения</label>
+    <textarea class="field" id="supportText" maxlength="1500" placeholder="Здравствуйте! Подскажите по заказу…"></textarea>
+    <button class="primary" id="sendSupport" style="margin-top:14px">Отправить сообщение</button>
+    <div id="supportStatus"></div>
+  </section>
+</div>
+
+<div id="toast" hidden></div>
 
 <script>
 'use strict';
-
-/* ============================================================
-   ОПТИМИЗИРОВАННЫЙ ЛЁГКИЙ ФОН НА CANVAS (БЕЗ ЛАГОВ)
-   DPR фиксирован на 1.0 (чтобы не грузить мобильный GPU),
-   3 мягких градиентных пятна + легкие частицы.
-   ============================================================ */
-(function bg(){
-  const canvas = document.getElementById('bgCanvas');
-  const ctx = canvas.getContext('2d', { alpha: false });
-  let W = 0, H = 0, raf = null, last = 0, t = 0, paused = false;
-
-  function makeSprite(r, g, b, size){
-    const c = document.createElement('canvas');
-    c.width = c.height = size;
-    const gx = c.getContext('2d');
-    const grad = gx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
-    grad.addColorStop(0, 'rgba(' + r + ',' + g + ',' + b + ',0.48)');
-    grad.addColorStop(0.4, 'rgba(' + r + ',' + g + ',' + b + ',0.2)');
-    grad.addColorStop(0.8, 'rgba(' + r + ',' + g + ',' + b + ',0.04)');
-    grad.addColorStop(1, 'rgba(' + r + ',' + g + ',' + b + ',0)');
-    gx.fillStyle = grad;
-    gx.fillRect(0, 0, size, size);
-    return c;
-  }
-
-  const blobs = [
-    { sprite: makeSprite(142, 98, 255, 200), bx: 0.2, by: 0.2, ax: 0.15, ay: 0.12, sx: 0.05, sy: 0.04, ph: 0, r: 0.55 },
-    { sprite: makeSprite(63, 224, 255, 200), bx: 0.8, by: 0.3, ax: 0.14, ay: 0.15, sx: 0.04, sy: 0.05, ph: 2.1, r: 0.48 },
-    { sprite: makeSprite(255, 75, 216, 200), bx: 0.4, by: 0.75, ax: 0.16, ay: 0.14, sx: 0.045, sy: 0.038, ph: 4.2, r: 0.45 }
-  ];
-
-  let particles = [];
-
-  function resize(){
-    W = window.innerWidth;
-    H = window.innerHeight;
-    canvas.width = W;
-    canvas.height = H;
-    const count = Math.min(22, Math.floor(W / 24));
-    particles = Array.from({ length: count }, () => ({
-      x: Math.random() * W,
-      y: Math.random() * H,
-      r: Math.random() * 1.5 + 0.6,
-      v: Math.random() * 7 + 4,
-      drift: Math.random() * 0.5 + 0.2,
-      a: Math.random() * 0.35 + 0.15,
-      ph: Math.random() * 6.28
-    }));
-  }
-
-  function frame(now){
-    if (!last) last = now;
-    let dt = (now - last) / 1000;
-    last = now;
-    if (dt > 0.05) dt = 0.05;
-    t += dt;
-
-    ctx.fillStyle = '#050711';
-    ctx.fillRect(0, 0, W, H);
-
-    ctx.globalCompositeOperation = 'lighter';
-    const minS = Math.min(W, H);
-
-    for (let i = 0; i < blobs.length; i++){
-      const b = blobs[i];
-      const x = (b.bx + Math.sin(t * b.sx + b.ph) * b.ax) * W;
-      const y = (b.by + Math.cos(t * b.sy + b.ph * 0.7) * b.ay) * H;
-      const r = b.r * minS * (1 + Math.sin(t * 0.1 + b.ph) * 0.1);
-      ctx.drawImage(b.sprite, x - r, y - r, r * 2, r * 2);
-    }
-
-    ctx.fillStyle = '#dfd8ff';
-    for (let i = 0; i < particles.length; i++){
-      const p = particles[i];
-      p.y -= p.v * dt;
-      p.x += Math.sin(t * p.drift + p.ph) * 0.3;
-      if (p.y < -10){ p.y = H + 10; p.x = Math.random() * W; }
-      ctx.globalAlpha = p.a;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r, 0, 6.28);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-    ctx.globalCompositeOperation = 'source-over';
-
-    if (!paused) raf = requestAnimationFrame(frame);
-  }
-
-  window.addEventListener('resize', () => { resize(); });
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden){ paused = true; if (raf) cancelAnimationFrame(raf); }
-    else { paused = false; last = 0; raf = requestAnimationFrame(frame); }
-  });
-
-  resize();
-  raf = requestAnimationFrame(frame);
-})();
-
-/* ============================================================
-   ПРИЛОЖЕНИЕ: ЦЕНА ЗА 1 ШТ, ГЛОБАЛЬНЫЙ ПОИСК, КОДЫ ОШИБОК
-   ============================================================ */
 const API = 'https://vibeboost-2.onrender.com';
 const ICONS = {
   'Telegram':'telegram.svg','ВКонтакте':'vk.svg','Instagram':'instagram.svg',
@@ -491,485 +291,691 @@ const ICONS = {
 
 const $ = id => document.getElementById(id);
 const tg = window.Telegram?.WebApp;
-let services = [], network = null, category = null, selected = null, balance = 0, busy = false, toastTimer;
+let services = [], network = null, category = null, selected = null;
+let balance = 0, busy = false, toastTimer;
+let myOrders = [];
 
-// Форматирование цен: ВСЕГДА ЗА 1 ШТУКУ
-function formatUnitPrice(ratePer1000){
-  const unit = Number(ratePer1000) / 1000;
-  if (!isFinite(unit) || unit <= 0) return '— ₽';
-  if (unit >= 10){
-    return unit.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₽';
-  } else if (unit >= 1){
-    return unit.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 3 }) + ' ₽';
-  } else if (unit >= 0.01){
-    return unit.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 3 }) + ' ₽';
-  } else {
-    // микро-цены (например, 0.005)
-    return unit.toLocaleString('ru-RU', { minimumFractionDigits: 3, maximumFractionDigits: 4 }) + ' ₽';
+// Получение ID пользователя и хештега #id123456
+function getUserId() {
+  if (tg?.initDataUnsafe?.user?.id) return String(tg.initDataUnsafe.user.id);
+  const raw = auth();
+  if (raw) {
+    try {
+      const u = new URLSearchParams(raw).get('user');
+      if (u) {
+        const parsed = JSON.parse(u);
+        if (parsed?.id) return String(parsed.id);
+      }
+    } catch {}
   }
+  return '';
 }
 
-// Форматирование общей суммы заказа
-const formatMoney = n => Number(n).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₽';
-
-function toast(msg){
-  const t = $('toast');
-  t.textContent = msg;
-  t.hidden = false;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.hidden = true; }, 4500);
+function getUserHashtag() {
+  const uid = getUserId();
+  return uid ? `#id${uid}` : '#id_unknown';
 }
 
-function el(tag, text, cls){
-  const e = document.createElement(tag);
-  if (text !== undefined) e.textContent = text;
-  if (cls) e.className = cls;
-  return e;
+function appendUserTag(text) {
+  const tag = getUserHashtag();
+  const clean = String(text || '').trim();
+  return clean.includes(tag) ? clean : `${clean}\n\n${tag}`;
 }
 
-function hideSplash(){
+// Лёгкий оптимизированный плавающий фон
+(function initBg() {
+  const canvas = $('bgCanvas');
+  const ctx = canvas.getContext('2d', { alpha: false });
+  let w = 0, h = 0, paused = false;
+
+  const blobs = [
+    { x: 0.2, y: 0.25, r: 260, vx: 0.22, vy: 0.16, c1: 'rgba(123,82,255,0.28)', c2: 'rgba(123,82,255,0)' },
+    { x: 0.8, y: 0.7,  r: 280, vx: -0.18, vy: -0.2, c1: 'rgba(38,198,238,0.22)', c2: 'rgba(38,198,238,0)' },
+    { x: 0.5, y: 0.45, r: 240, vx: 0.15, vy: -0.14, c1: 'rgba(168,85,247,0.18)', c2: 'rgba(168,85,247,0)' }
+  ];
+
+  const sprites = blobs.map(b => {
+    const c = document.createElement('canvas');
+    c.width = c.height = b.r * 2;
+    const g = c.getContext('2d');
+    const grad = g.createRadialGradient(b.r, b.r, 0, b.r, b.r, b.r);
+    grad.addColorStop(0, b.c1);
+    grad.addColorStop(1, b.c2);
+    g.fillStyle = grad;
+    g.fillRect(0, 0, b.r * 2, b.r * 2);
+    return c;
+  });
+
+  let dots = [];
+  function resize() {
+    w = canvas.width = window.innerWidth;
+    h = canvas.height = window.innerHeight;
+    blobs.forEach((b, i) => {
+      if (b.px === undefined) { b.px = b.x * w; b.py = b.y * h; }
+    });
+    const count = Math.min(26, Math.max(12, Math.floor(w / 24)));
+    dots = Array.from({ length: count }, () => ({
+      x: Math.random() * w,
+      y: Math.random() * h,
+      s: Math.random() * 1.6 + 0.6,
+      v: Math.random() * 0.25 + 0.08,
+      a: Math.random() * 0.5 + 0.2
+    }));
+  }
+
+  window.addEventListener('resize', resize, { passive: true });
+  document.addEventListener('visibilitychange', () => { paused = document.hidden; });
+  resize();
+
+  function frame() {
+    if (!paused) {
+      ctx.fillStyle = '#070b18';
+      ctx.fillRect(0, 0, w, h);
+
+      for (let i = 0; i < blobs.length; i++) {
+        const b = blobs[i];
+        b.px += b.vx;
+        b.py += b.vy;
+        if (b.px < -60 || b.px > w + 60) b.vx *= -1;
+        if (b.py < -60 || b.py > h + 60) b.vy *= -1;
+        ctx.drawImage(sprites[i], b.px - b.r, b.py - b.r);
+      }
+
+      ctx.fillStyle = 'rgba(210,198,255,0.45)';
+      for (let i = 0; i < dots.length; i++) {
+        const d = dots[i];
+        d.y -= d.v;
+        if (d.y < -5) { d.y = h + 5; d.x = Math.random() * w; }
+        ctx.globalAlpha = d.a;
+        ctx.fillRect(d.x, d.y, d.s, d.s);
+      }
+      ctx.globalAlpha = 1;
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+
+function hideSplash() {
   const s = $('splash');
   if (s && !s.classList.contains('hide')) s.classList.add('hide');
 }
 setTimeout(hideSplash, 1400);
 
-function auth(){
+// Форматирование денег и цены за 1 шт.
+const money = n => Number(n).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function formatUnitPrice(ratePer1000) {
+  const unit = Number(ratePer1000) / 1000;
+  if (unit >= 1) return unit.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₽';
+  if (unit >= 0.01) return unit.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) + ' ₽';
+  return unit.toLocaleString('ru-RU', { minimumFractionDigits: 4, maximumFractionDigits: 6 }) + ' ₽';
+}
+
+function toast(s) {
+  const t = $('toast');
+  t.textContent = s;
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.hidden = true, 4200);
+}
+
+function el(t, x, c) {
+  const e = document.createElement(t);
+  if (x !== undefined) e.textContent = x;
+  if (c) e.className = c;
+  return e;
+}
+
+function auth() {
   if (tg?.initData && tg.initData.length > 0) return tg.initData;
-  if (location.hash && location.hash.length > 1){
-    const p = new URLSearchParams(location.hash.slice(1));
-    const h = p.get('tgWebAppData');
+  if (location.hash && location.hash.length > 1) {
+    const h = new URLSearchParams(location.hash.slice(1)).get('tgWebAppData');
     if (h) return h;
   }
   return '';
 }
 
-/* ============================================================
-   ОБРАБОТЧИК ОШИБОК С ВНУТРЕННИМИ КОДАМИ ДЛЯ АДМИНА
-   ============================================================ */
-function classifyError(err){
-  const text = (err && (err.message || String(err))) || '';
-  const lower = text.toLowerCase();
+// Классификация ошибок без раскрытия внутренних деталей
+function classifyError(rawMsg, status = 0) {
+  const msg = String(rawMsg || '').toLowerCase();
 
-  // 1. Недостаточно баланса
-  if (lower.includes('недостаточно средств') || lower.includes('insufficient') || lower.includes('402')){
+  // Ошибка со стороны шлюза/панели (например, "Требуется: 0.240000, доступно: 0.106572")
+  if (msg.includes('требуется:') || msg.includes('доступно:') || msg.includes('provider') || msg.includes('smm') || status === 503) {
     return {
-      type: 'balance',
-      title: 'Недостаточно средств на балансе',
-      desc: 'Для совершения этой покупки не хватает средств. Пожалуйста, пополните баланс.',
-      code: null
+      code: 'ERR-PRV-503',
+      text: 'Услуга временно недоступна на стороне сервиса. Попробуйте выбрать другую услугу или повторить позже.',
+      lowBalance: false
     };
   }
 
-  // 2. Ошибка авторизации Telegram (initData)
-  if (lower.includes('initdata') || lower.includes('подпись') || lower.includes('auth_date') || lower.includes('403')){
+  // Реальная нехватка личного баланса пользователя
+  if (msg.includes('недостаточно') || msg.includes('мало средств') || msg.includes('insufficient') || status === 402) {
     return {
-      type: 'auth',
-      title: 'Ошибка авторизации сессии',
-      desc: 'Пожалуйста, закройте и снова откройте приложение через кнопку бота в Telegram.',
-      code: 'ERR-AUTH-403'
+      code: 'ERR-BAL-402',
+      text: 'Недостаточно средств на вашем балансе. Пополните счёт, чтобы оформить заказ.',
+      lowBalance: true
     };
   }
 
-  // 3. Google Таблица (Sheets / Secret / Lock)
-  if (lower.includes('sheets') || lower.includes('гугл таблица') || lower.includes('таблиц') || lower.includes('unauthorized') || lower.includes('sheet')){
+  if (msg.includes('initdata') || msg.includes('auth') || msg.includes('подпис') || status === 401 || status === 403) {
     return {
-      type: 'sheets',
-      title: 'Сервис данных временно недоступен',
-      desc: 'Произошла техническая ошибка базы данных. Передайте код администратору для устранения:',
-      code: 'ERR-GS-502'
+      code: 'ERR-AUTH-403',
+      text: 'Ошибка авторизации. Закройте приложение и откройте его заново из бота.',
+      lowBalance: false
     };
   }
 
-  // 4. Поставщик услуг (Twiboost)
-  if (lower.includes('поставщик') || lower.includes('twiboost') || lower.includes('provider') || lower.includes('отклонил')){
+  if (msg.includes('sheet') || msg.includes('таблиц') || msg.includes('google') || msg.includes('gspread') || status === 502) {
     return {
-      type: 'provider',
-      title: 'Услуга временно недоступна у поставщика',
-      desc: 'Поставщик не смог принять заказ. Деньги возвращены на баланс. Сообщите код поддержке:',
-      code: 'ERR-PRV-503'
+      code: 'ERR-GS-502',
+      text: 'Временный сбой синхронизации профиля. Попробуйте через минуту.',
+      lowBalance: false
     };
   }
 
-  // 5. Некорректные параметры (ссылка, лимит)
-  if (lower.includes('количество') || lower.includes('ссылк') || lower.includes('каталог') || lower.includes('404')){
+  if (msg.includes('failed to fetch') || msg.includes('network') || msg.includes('timeout') || msg.includes('abort')) {
     return {
-      type: 'validation',
-      title: 'Неверные данные заказа',
-      desc: text.replace(/Google Таблица.*?:/gi, '').trim(),
-      code: 'ERR-VAL-400'
+      code: 'ERR-NET-504',
+      text: 'Нет соединения с сервером. Проверьте интернет и повторите попытку.',
+      lowBalance: false
     };
   }
 
-  // 6. Сеть / таймаут
-  if (lower.includes('failed to fetch') || lower.includes('network') || lower.includes('abort') || lower.includes('таймаут')){
+  if (status === 400 || msg.includes('неверн') || msg.includes('ссылк') || msg.includes('количеств')) {
     return {
-      type: 'network',
-      title: 'Сбой интернет-соединения',
-      desc: 'Не удалось связаться с сервером. Проверьте интернет и повторите попытку.',
-      code: 'ERR-NET-504'
+      code: 'ERR-VAL-400',
+      text: 'Проверьте правильность ссылки и указанного количества.',
+      lowBalance: false
     };
   }
 
-  // 7. Общая серверная ошибка
   return {
-    type: 'server',
-    title: 'Внутренняя ошибка сервиса',
-    desc: 'Произошел непредвиденный сбой. Сообщите этот код администратору:',
-    code: 'ERR-SRV-500'
+    code: 'ERR-SRV-500',
+    text: 'Произошла техническая ошибка при обработке запроса.',
+    lowBalance: false
   };
 }
 
-async function api(path, payload){
-  const r = await fetch(API + path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
+function renderError(container, errInfo) {
+  container.replaceChildren();
+  const box = el('div', undefined, 'err-box');
+  box.append(el('div', errInfo.text));
+  box.append(el('span', `Код ошибки: ${errInfo.code}`, 'err-code'));
+  if (errInfo.lowBalance) {
+    const btn = el('button', 'Пополнить баланс +', 'secondary-btn');
+    btn.type = 'button';
+    btn.onclick = () => {
+      $('orderOverlay').hidden = true;
+      $('topupOverlay').hidden = false;
+    };
+    box.append(btn);
+  }
+  container.append(box);
+}
+
+async function api(path, payload) {
+  let r;
+  try {
+    r = await fetch(API + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  } catch (e) {
+    throw classifyError(e.message, 0);
+  }
+
   const text = await r.text();
   let d;
-  try { d = JSON.parse(text); }
-  catch { throw Error('Сервер вернул некорректный ответ (код 500)'); }
-  if (!r.ok || !d.ok) throw Error(d.error || ('HTTP ' + r.status));
+  try {
+    d = JSON.parse(text);
+  } catch {
+    throw classifyError('invalid json', r.status || 500);
+  }
+
+  if (!r.ok || !d.ok) {
+    throw classifyError(d.error || ('HTTP ' + r.status), r.status);
+  }
   return d;
 }
 
-async function refreshBalance(){
-  const cached = localStorage.getItem('vb_bal');
-  if (cached !== null) $('balance').textContent = formatMoney(Number(cached));
+// Заказы пользователя (сохранение и отображение)
+function loadOrders() {
+  try {
+    const uid = getUserId() || 'guest';
+    const raw = localStorage.getItem('vb_orders_' + uid);
+    myOrders = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(myOrders)) myOrders = [];
+  } catch {
+    myOrders = [];
+  }
+  updateOrdersBadge();
+}
+
+function saveOrders() {
+  try {
+    const uid = getUserId() || 'guest';
+    localStorage.setItem('vb_orders_' + uid, JSON.stringify(myOrders.slice(0, 100)));
+  } catch {}
+  updateOrdersBadge();
+}
+
+function updateOrdersBadge() {
+  $('ordersCount').textContent = String(myOrders.length);
+}
+
+function renderOrdersModal() {
+  const list = $('ordersList');
+  list.replaceChildren();
+
+  if (!myOrders.length) {
+    list.append(el('p', 'У вас пока нет оформленных заказов.', 'empty'));
+    return;
+  }
+
+  for (const o of myOrders) {
+    const card = el('div', undefined, 'order-card');
+    const top = el('div', undefined, 'order-top');
+    top.append(
+      el('span', `Заказ #${o.order_id || '—'}`, 'order-id'),
+      el('span', o.status || 'Принят в работу', 'order-status')
+    );
+
+    const title = el('div', `${o.network ? o.network + ' · ' : ''}${o.service_name}`, 'order-title');
+    const link = el('div', o.link, 'order-link');
+
+    const foot = el('div', undefined, 'order-foot');
+    foot.append(
+      el('span', `Кол-во: ${o.quantity} шт. · ${o.date || ''}`),
+      el('strong', `${money(o.charge)} ₽`)
+    );
+
+    card.append(top, title, link, foot);
+    list.append(card);
+  }
+}
+
+function openOrdersModal() {
+  renderOrdersModal();
+  $('ordersOverlay').hidden = false;
+}
+
+// Баланс и синхронизация заказов
+async function refreshBalance() {
+  const uid = getUserId() || 'guest';
+  const cached = localStorage.getItem('vb_bal_' + uid);
+  if (cached !== null) {
+    balance = Number(cached);
+    $('balance').textContent = money(balance) + ' ₽';
+  }
 
   const a = auth();
-  if (!a){
+  if (!a) {
     if (cached === null) $('balance').textContent = '0,00 ₽';
     return;
   }
 
   try {
-    const d = await api('/api/user/info', { initData: a });
+    const d = await api('/api/user/info', { initData: a, user_id: getUserId(), user_tag: getUserHashtag() });
     balance = Number(d.balance || 0);
-    $('balance').textContent = formatMoney(balance);
-    localStorage.setItem('vb_bal', String(balance));
-  } catch (e){
+    $('balance').textContent = money(balance) + ' ₽';
+    localStorage.setItem('vb_bal_' + uid, String(balance));
+
+    if (Array.isArray(d.orders) && d.orders.length) {
+      myOrders = d.orders;
+      saveOrders();
+    }
+  } catch (e) {
     if (cached === null) $('balance').textContent = '0,00 ₽';
-    console.error('Баланс:', e);
   }
 }
 
-// Создание карточки услуги (цена везде ЗА 1 ШТУКУ)
-function createCard(title, sub, cb, net, unitPriceText, isSearchMatch){
+function createNetIcon(net, cls) {
+  const i = el('span', (net || 'VB').slice(0, 2).toUpperCase(), cls);
+  const f = ICONS[net];
+  if (f) {
+    const im = new Image();
+    im.alt = '';
+    im.onload = () => i.replaceChildren(im);
+    im.src = './' + f;
+  }
+  return i;
+}
+
+function card(title, sub, cb, net, priceText, priceUnitText) {
   const b = el('button', undefined, 'card');
   b.type = 'button';
+  if (net) b.append(createNetIcon(net, 'icon'));
 
-  if (net){
-    const i = el('span', net.slice(0, 2).toUpperCase(), 'card-icon');
-    const f = ICONS[net];
-    if (f){
-      const im = new Image();
-      im.alt = '';
-      im.onload = () => i.replaceChildren(im);
-      im.src = './' + f;
-    }
-    b.append(i);
-  }
-
-  const info = el('span', undefined, 'card-info');
-  info.append(el('span', title, 'card-title'));
-  if (sub) info.append(el('span', sub, 'card-sub'));
+  const info = el('span', undefined, 'info');
+  info.append(el('span', title, 'title'), el('span', sub, 'sub'));
   b.append(info);
 
-  if (unitPriceText){
-    const pb = el('span', undefined, 'card-price-block');
-    pb.append(el('span', unitPriceText, 'card-price'));
-    pb.append(el('span', 'за 1 шт.', 'card-unit'));
+  if (priceText) {
+    const pb = el('span', undefined, 'price-box');
+    pb.append(el('span', priceText, 'price'));
+    if (priceUnitText) pb.append(el('span', priceUnitText, 'price-unit'));
     b.append(pb);
   }
 
-  b.append(el('span', '›', 'card-arrow'));
+  b.append(el('span', '›', 'arrow'));
   b.onclick = cb;
   return b;
 }
 
-/* ============================================================
-   УМНЫЙ ПОИСК ПО ВСЕМУ СПИСКУ УСЛУГ (БЕЗ ОГРАНИЧЕНИЙ ЭКРАНА)
-   ============================================================ */
-function searchServices(query){
-  const q = query.trim().toLowerCase();
-  const words = q.split(/\s+/).filter(Boolean);
-  if (!words.length) return [];
-
-  return services.filter(s => {
-    const hay = ((s.name || '') + ' ' + (s.network || '') + ' ' + (s.category || '') + ' ' + (s.service || '')).toLowerCase();
-    // Все слова из запроса должны присутствовать
-    return words.every(w => hay.includes(w));
-  });
-}
-
-function render(){
-  const query = $('search').value.trim();
-  const g = $('grid');
-  const clearBtn = $('searchClear');
-  g.replaceChildren();
-
-  clearBtn.classList.toggle('show', query.length > 0);
-
-  // ЕСЛИ В ПОИСКЕ ЧТО-ТО ВВЕДЕНО — ИЩЕМ ПО ВСЕМУ СПИСКУ УСЛУГ
-  if (query.length > 0){
-    $('back').hidden = true;
-    $('sectionTitleText').textContent = 'Найдено по запросу «' + query + '»';
-
-    const results = searchServices(query);
-    $('counter').textContent = results.length + ' шт.';
-
-    if (!results.length){
-      g.append(el('p', 'По вашему запросу ничего не найдено. Попробуйте другое слово (например: лайки, тг, просмотры).', 'empty-state'));
-      return;
-    }
-
-    for (let i = 0; i < results.length; i++){
-      const s = results[i];
-      const sub = s.network + ' · ' + s.category + ' · ID ' + s.service;
-      const unitP = formatUnitPrice(s.rate);
-      g.append(createCard(s.name, sub, () => openOrder(s), s.network, unitP, true));
-    }
+// Глобальный поиск с предложениями услуг под строкой поиска
+function renderQuickSearch(q) {
+  const box = $('quickResults');
+  if (!q) {
+    box.hidden = true;
+    box.replaceChildren();
     return;
   }
 
-  // СТАНДАРТНАЯ НАВИГАЦИЯ (КОГДА ПОИСК ПУСТ)
+  const tokens = q.split(/\s+/).filter(Boolean);
+  const matches = services.filter(s => {
+    const hay = `${s.name} ${s.network} ${s.category} ${s.service}`.toLowerCase();
+    return tokens.every(t => hay.includes(t));
+  });
+
+  box.replaceChildren();
+  const head = el('div', undefined, 'qr-head');
+  head.append(
+    el('span', 'Найденные услуги по всем сетям'),
+    el('span', `Найдено: ${matches.length}`)
+  );
+  box.append(head);
+
+  if (!matches.length) {
+    const empty = el('div', 'По вашему запросу услуг не найдено', 'qr-item');
+    empty.style.color = 'var(--muted)';
+    empty.style.cursor = 'default';
+    box.append(empty);
+    box.hidden = false;
+    return;
+  }
+
+  for (const s of matches.slice(0, 25)) {
+    const row = el('button', undefined, 'qr-item');
+    row.type = 'button';
+    row.append(createNetIcon(s.network, 'qr-icon'));
+
+    const info = el('span', undefined, 'qr-info');
+    info.append(
+      el('span', s.name, 'qr-name'),
+      el('span', `${s.network} · ${s.category} · от ${s.min} шт.`, 'qr-net')
+    );
+
+    const pr = el('span', undefined, 'qr-price');
+    pr.append(
+      el('strong', formatUnitPrice(s.rate)),
+      el('small', 'за 1 шт.')
+    );
+
+    row.append(info, pr);
+    row.onclick = () => openOrder(s);
+    box.append(row);
+  }
+
+  box.hidden = false;
+}
+
+function render() {
+  const q = $('search').value.trim().toLowerCase();
+  $('clearSearch').hidden = !q;
+  renderQuickSearch(q);
+
+  const g = $('grid');
+  g.replaceChildren();
   $('back').hidden = !network;
 
-  if (!network){
-    $('sectionTitleText').textContent = 'Выберите соцсеть';
+  if (!network) {
     const nets = [...new Set(services.map(s => s.network))].sort((a, b) => a.localeCompare(b, 'ru'));
-    $('counter').textContent = nets.length + ' площадок';
-
-    for (let i = 0; i < nets.length; i++){
-      const n = nets[i];
+    for (const n of nets) {
       const count = services.filter(s => s.network === n).length;
-      g.append(createCard(n, 'Доступно услуг: ' + count, () => {
-        network = n; category = null; render();
-      }, n, null, false));
+      g.append(card(n, `Доступно услуг: ${count}`, () => {
+        network = n; category = null; $('search').value = ''; render();
+      }, n));
     }
-  } else if (!category){
-    $('sectionTitleText').textContent = network + ' — категории';
+  } else if (!category) {
     const filtered = services.filter(s => s.network === network);
     const cats = [...new Set(filtered.map(s => s.category))].sort((a, b) => a.localeCompare(b, 'ru'));
-    $('counter').textContent = cats.length + ' категорий';
-
-    for (let i = 0; i < cats.length; i++){
-      const c = cats[i];
+    for (const c of cats) {
       const count = filtered.filter(s => s.category === c).length;
-      g.append(createCard(c, 'Услуг: ' + count, () => {
-        category = c; render();
-      }, null, null, false));
+      g.append(card(c, `Доступно услуг: ${count}`, () => {
+        category = c; $('search').value = ''; render();
+      }));
     }
   } else {
-    $('sectionTitleText').textContent = category;
-    const list = services.filter(s => s.network === network && s.category === category);
-    $('counter').textContent = list.length + ' услуг';
-
-    for (let i = 0; i < list.length; i++){
-      const s = list[i];
-      const unitP = formatUnitPrice(s.rate);
-      g.append(createCard(
+    for (const s of services.filter(s => s.network === network && s.category === category)) {
+      g.append(card(
         s.name,
-        'ID ' + s.service + ' · от ' + s.min + ' до ' + s.max + ' шт.',
+        `ID ${s.service} · от ${s.min} до ${s.max} шт.`,
         () => openOrder(s),
         null,
-        unitP,
-        false
+        formatUnitPrice(s.rate),
+        'за 1 шт.'
       ));
     }
   }
 
-  if (!g.children.length) g.append(el('p', 'Услуги не найдены', 'empty-state'));
+  $('counter').textContent = `Разделов: ${g.children.length}`;
+  if (!g.children.length) g.append(el('p', 'Ничего не найдено', 'empty'));
 }
 
-function openOrder(s){
+function openOrder(s) {
   selected = s;
   $('serviceName').textContent = s.name;
-  $('serviceMeta').textContent = s.network + ' · ' + s.category + ' · ID ' + s.service;
-  $('description').textContent = s.description || 'Описание услуги отсутствует.';
+  $('serviceMeta').textContent = `${s.network} · ${s.category} · ID ${s.service}`;
+  $('description').textContent = s.description || 'Описание не предоставлено';
   $('link').value = '';
   $('quantity').min = s.min;
   $('quantity').max = s.max;
   $('quantity').value = s.min;
-  $('limits').textContent = '(от ' + s.min + ' до ' + s.max + ')';
+  $('limits').textContent = `(от ${s.min} до ${s.max})`;
+  $('orderStatus').replaceChildren();
 
-  // Показываем цену за 1 шт. прямо в модалке
-  $('unitPriceLabel').textContent = formatUnitPrice(s.rate);
+  const subBtn = $('submit');
+  subBtn.disabled = false;
+  subBtn.textContent = 'Подтвердить заказ';
 
-  // Скрываем блок ошибок
-  hideOrderError();
-
-  const btn = $('submit');
-  btn.disabled = false;
-  btn.innerHTML = '<span>Подтвердить заказ</span>';
-
-  updatePrice();
+  price();
   $('orderOverlay').hidden = false;
 }
 
-function updatePrice(){
+function price() {
   if (!selected) return;
   const raw = $('quantity').value;
   const q = Number(raw);
-  const valid = /^\d+$/.test(raw) && Number.isSafeInteger(q) && q >= Number(selected.min) && q <= Number(selected.max);
-  $('quantity').setCustomValidity(valid ? '' : ('Введите число от ' + selected.min + ' до ' + selected.max));
-  $('total').textContent = valid ? formatMoney(Number(selected.rate) * q / 1000) : '—';
+  const isValid = /^\d+$/.test(raw) && Number.isSafeInteger(q) && q >= Number(selected.min) && q <= Number(selected.max);
+  $('quantity').setCustomValidity(isValid ? '' : `Количество от ${selected.min} до ${selected.max}`);
+  $('unitPrice').textContent = formatUnitPrice(selected.rate);
+  $('total').textContent = isValid ? `${money(Number(selected.rate) * q / 1000)} ₽` : '—';
 }
 
-function showOrderError(err){
-  const box = $('orderErrBox');
-  const info = classifyError(err);
-
-  $('errTitle').textContent = info.title;
-  $('errDesc').textContent = info.desc;
-
-  const badge = $('errCodeBadge');
-  if (info.code){
-    badge.innerHTML = '<span class="err-code">' + info.code + '</span>';
-  } else {
-    badge.innerHTML = '';
-  }
-
-  // Если не хватает баланса — предлагаем кнопку мгновенного пополнения
-  const topupWrap = $('errTopupBtnWrap');
-  topupWrap.hidden = (info.type !== 'balance');
-
-  box.classList.add('show');
-}
-
-function hideOrderError(){
-  $('orderErrBox').classList.remove('show');
-}
-
-// Нажатие "Пополнить баланс" прямо из ошибки
-$('errTopupBtn').onclick = () => {
-  $('orderOverlay').hidden = true;
-  $('topupOverlay').hidden = false;
-};
-
-// Отправка формы заказа с защитой от повторного клика
+// Оформление заказа
 $('orderForm').onsubmit = async e => {
   e.preventDefault();
   if (busy || !selected) return;
-  updatePrice();
+  price();
   if (!e.currentTarget.reportValidity()) return;
 
+  const qty = Number($('quantity').value);
+  const totalCost = Number(selected.rate) * qty / 1000;
+
+  // Проверка баланса пользователя перед отправкой на сервер
+  if (balance > 0 && totalCost > balance) {
+    renderError($('orderStatus'), classifyError('недостаточно средств', 402));
+    return;
+  }
+
   const a = auth();
-  if (!a){
-    showOrderError(new Error('initData отсутствует. Откройте через Telegram.'));
+  if (!a) {
+    renderError($('orderStatus'), classifyError('auth', 403));
     return;
   }
 
   busy = true;
-  hideOrderError();
+  const b = $('submit');
+  b.disabled = true;
+  b.innerHTML = '<span class="loading"><i class="spin"></i>Оформляем заказ…</span>';
+  $('orderStatus').replaceChildren();
 
-  const btn = $('submit');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spin-wrap"><i class="spinner"></i>Оформляем заказ…</span>';
+  const linkVal = $('link').value.trim();
+  const userTag = getUserHashtag();
 
   try {
     const d = await api('/api/order', {
       initData: a,
+      user_id: getUserId(),
+      user_tag: userTag,
+      admin_note: appendUserTag(`Новый заказ: ${selected.name} (${qty} шт.)`),
       order: {
         service: selected.service,
-        quantity: Number($('quantity').value),
-        link: $('link').value.trim()
+        quantity: qty,
+        link: linkVal
       }
     });
 
-    const newBal = Number(d.new_balance);
-    $('balance').textContent = formatMoney(newBal);
-    localStorage.setItem('vb_bal', String(newBal));
+    balance = Number(d.new_balance !== undefined ? d.new_balance : Math.max(0, balance - totalCost));
+    const uid = getUserId() || 'guest';
+    $('balance').textContent = money(balance) + ' ₽';
+    localStorage.setItem('vb_bal_' + uid, String(balance));
 
+    // Добавляем заказ в список заказов пользователя
+    myOrders.unshift({
+      order_id: d.order || d.order_id || Math.floor(100000 + Math.random() * 900000),
+      network: selected.network,
+      service_name: selected.name,
+      link: linkVal,
+      quantity: qty,
+      charge: totalCost,
+      status: 'Принят в работу',
+      date: new Date().toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+    });
+    saveOrders();
+
+    b.textContent = 'Заказ оформлен ✓';
     toast('✅ Заказ успешно оформлен!');
-    btn.innerHTML = '<span>Заказ принят!</span>';
-    btn.disabled = true;
 
-    setTimeout(() => { $('orderOverlay').hidden = true; }, 1800);
-  } catch (err){
-    showOrderError(err);
-    btn.disabled = false;
-    btn.innerHTML = '<span>Повторить попытку</span>';
+    // Закрываем окно заказа и автоматически открываем список заказов
+    setTimeout(() => {
+      $('orderOverlay').hidden = true;
+      openOrdersModal();
+    }, 550);
+  } catch (err) {
+    const errInfo = err?.code ? err : classifyError(err?.message || '');
+    renderError($('orderStatus'), errInfo);
+    b.disabled = false;
+    b.textContent = 'Повторить заказ';
   } finally {
     busy = false;
   }
 };
 
-$('quantity').oninput = updatePrice;
+$('quantity').oninput = price;
 $('closeOrder').onclick = () => { if (!busy) $('orderOverlay').hidden = true; };
-$('openTopup').onclick = () => { $('topupOverlay').hidden = false; };
+
+$('openOrders').onclick = openOrdersModal;
+$('closeOrders').onclick = () => { $('ordersOverlay').hidden = true; };
+
+$('openTopup').onclick = () => { $('topupStatus').replaceChildren(); $('topupOverlay').hidden = false; };
 $('closeTopup').onclick = () => { $('topupOverlay').hidden = true; };
 
-// Поиск в реальном времени + очистка
-$('search').oninput = () => { render(); };
-$('searchClear').onclick = () => {
-  $('search').value = '';
-  $('search').focus();
-  render();
-};
-
-$('home').onclick = () => {
-  network = null; category = null; $('search').value = ''; render();
-};
-$('back').onclick = () => {
-  if (category) category = null; else network = null;
-  render();
-};
-
-// Запрос на пополнение
 $('createTopup').onclick = async () => {
-  const btn = $('createTopup');
-  const errBox = $('topupErrBox');
-  errBox.classList.remove('show');
+  const b = $('createTopup');
+  b.disabled = true;
+  b.innerHTML = '<span class="loading"><i class="spin"></i>Отправляем…</span>';
+  $('topupStatus').replaceChildren();
 
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spin-wrap"><i class="spinner"></i>Отправляем…</span>';
+  const amount = Number($('topupAmount').value);
+  const method = $('topupMethod').value;
+  const userTag = getUserHashtag();
+
   try {
     const d = await api('/api/topup', {
       initData: auth(),
-      amount: Number($('topupAmount').value),
-      method: $('topupMethod').value
+      user_id: getUserId(),
+      user_tag: userTag,
+      amount,
+      method,
+      message: appendUserTag(`Запрос на пополнение: ${amount} ₽ (${method})`)
     });
-    toast('✅ Запрос отправлен администратору');
-    $('topupErrTitle').textContent = 'Запрос успешно отправлен';
-    $('topupErrTitle').style.color = 'var(--green)';
-    $('topupErrDesc').textContent = d.message || 'Ожидайте проверки платежа.';
-    errBox.classList.add('show');
-    setTimeout(() => { $('topupOverlay').hidden = true; }, 2200);
-  } catch (e){
-    const info = classifyError(e);
-    $('topupErrTitle').textContent = info.title;
-    $('topupErrTitle').style.color = '#ff839a';
-    $('topupErrDesc').textContent = (info.code ? info.code + ': ' : '') + info.desc;
-    errBox.classList.add('show');
+    const ok = el('div', '✅ ' + appendUserTag(d.message || 'Запрос на пополнение отправлен администратору.'), 'ok-box');
+    $('topupStatus').append(ok);
+    toast('Запрос отправлен администратору');
+  } catch (e) {
+    renderError($('topupStatus'), e?.code ? e : classifyError(e?.message || ''));
   } finally {
-    btn.disabled = false;
-    btn.innerHTML = '<span>Создать запрос</span>';
+    b.disabled = false;
+    b.textContent = 'Создать запрос';
   }
 };
 
-try { tg?.ready(); tg?.expand(); } catch (e) { console.error(e); }
+// Сообщение администратору с #id пользователя в конце
+$('openSupport').onclick = () => {
+  $('supportText').value = '';
+  $('supportStatus').replaceChildren();
+  $('supportOverlay').hidden = false;
+};
+$('closeSupport').onclick = () => { $('supportOverlay').hidden = true; };
 
-// Загрузка услуг
+$('sendSupport').onclick = async () => {
+  const raw = $('supportText').value.trim();
+  if (!raw) {
+    toast('Введите текст сообщения');
+    return;
+  }
+
+  const b = $('sendSupport');
+  b.disabled = true;
+  b.innerHTML = '<span class="loading"><i class="spin"></i>Отправляем…</span>';
+  $('supportStatus').replaceChildren();
+
+  const taggedMessage = appendUserTag(raw);
+
+  try {
+    await api('/api/support', {
+      initData: auth(),
+      user_id: getUserId(),
+      user_tag: getUserHashtag(),
+      message: taggedMessage
+    });
+    $('supportStatus').append(el('div', '✅ Сообщение отправлено администратору.', 'ok-box'));
+    $('supportText').value = '';
+    toast('Сообщение отправлено');
+  } catch (e) {
+    renderError($('supportStatus'), e?.code ? e : classifyError(e?.message || ''));
+  } finally {
+    b.disabled = false;
+    b.textContent = 'Отправить сообщение';
+  }
+};
+
+$('search').oninput = render;
+$('clearSearch').onclick = () => { $('search').value = ''; render(); $('search').focus(); };
+$('home').onclick = () => { network = null; category = null; $('search').value = ''; render(); };
+$('back').onclick = () => { if (category) category = null; else network = null; $('search').value = ''; render(); };
+
+tg?.ready();
+tg?.expand();
+loadOrders();
+
 (async () => {
   try {
     const r = await fetch('./services.json?v=' + Date.now());
-    if (!r.ok) throw Error('Каталог услуг временно недоступен');
-    const data = await r.json();
-    if (!Array.isArray(data) || !data.length) throw Error('Каталог пуст');
-
-    services = data.map(s => ({
+    if (!r.ok) throw Error('cat');
+    services = await r.json();
+    if (!Array.isArray(services) || !services.length) throw Error('cat');
+    services = services.map(s => ({
       ...s,
       network: String(s.network || 'Без сети'),
       category: String(s.category || 'Прочее'),
       name: String(s.name || 'Услуга')
     }));
-
     render();
-  } catch (e){
-    $('grid').append(el('p', 'Не удалось загрузить каталог. Пожалуйста, обновите страницу.', 'empty-state'));
-    toast('Ошибка загрузки: ERR-CAT-404');
+  } catch {
+    $('grid').append(el('p', 'Не удалось загрузить каталог (ERR-CAT-404)', 'empty'));
   } finally {
     hideSplash();
     refreshBalance();
