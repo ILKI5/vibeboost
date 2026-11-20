@@ -86,81 +86,56 @@ async def auth_user(payload):
 
 
 async def user_info(request):
-    if request.method == "OPTIONS": return web.Response(status=204, headers=cors())
+    if request.method == "OPTIONS":
+        return web.Response(status=204, headers=cors())
+
     try:
         payload = await request.json()
+        log.info(
+            "USER_INFO: initData_present=%s, initData_length=%s",
+            bool(payload.get("initData")),
+            len(payload.get("initData", "")),
+        )
+
         user, data = await auth_user(payload)
-        return web.json_response({"ok": True, "balance": float(data.get("balance", 0)),
-                                  "user": {"id": user["id"], "first_name": user.get("first_name", ""),
-                                           "username": user.get("username", "")}}, headers=cors())
-    except PermissionError as e:
-        return web.json_response({"ok": False, "error": str(e)}, status=403, headers=cors())
-    except Exception as e:
-        return web.json_response({"ok": False, "error": str(e)}, status=400, headers=cors())
 
+        log.info(
+            "USER_INFO OK: user_id=%s balance=%s",
+            user["id"],
+            data.get("balance", 0),
+        )
 
-async def submit_order(request):
-    if request.method == "OPTIONS": return web.Response(status=204, headers=cors())
-    charged = False
-    uid = None
-    amount = 0.0
-    try:
-        payload = await request.json()
-        user, profile = await auth_user(payload)
-        uid = int(user["id"])
-        order = payload.get("order") or {}
-        sid = str(order.get("service", ""))
-        item = catalog().get(sid)
-        if not item: raise ValueError("Услуга отсутствует в серверном каталоге")
-        quantity = int(order.get("quantity", 0))
-        minimum, maximum = int(item["min"]), int(item["max"])
-        if quantity < minimum or quantity > maximum:
-            raise ValueError(f"Количество должно быть от {minimum} до {maximum}")
-        link = str(order.get("link", "")).strip()
-        if not link or len(link) > 700: raise ValueError("Некорректная ссылка")
-        # Не доверяем сумме с фронтенда. Каталог задаёт цену за 1000.
-        amount = round(float(item["rate"]) * quantity / 1000, 2)
-        if amount <= 0: raise ValueError("Некорректная стоимость услуги")
-        charge = await sheets("charge", user_id=uid, amount=amount,
-                              comment=f"Заказ услуги {sid}")
-        charged = True
-        # Отправляем запрос поставщику только после атомарного списания.
-        assert http is not None
-        params = {"action": "add", "service": sid, "link": link,
-                  "quantity": str(quantity), "key": TWIBOOST_API_KEY}
-        async with http.get("https://twiboost.com/api/v2", params=params,
-                            timeout=ClientTimeout(total=35)) as r:
-            provider_text = await r.text()
-            try: provider = json.loads(provider_text)
-            except json.JSONDecodeError:
-                # Неизвестный ответ: не возвращаем автоматически, чтобы не допустить двойного заказа.
-                log.error("Provider returned non-JSON; uid=%s status=%s", uid, r.status)
-                return web.json_response({"ok": False, "error": "Не удалось однозначно подтвердить заказ. Напишите поддержке; повторно не отправляйте."}, status=502, headers=cors())
-        if provider.get("order") is None:
-            # Явный отказ провайдера — вернуть списание.
-            await sheets("refund", user_id=uid, amount=amount, comment=f"Возврат: отказ поставщика по услуге {sid}")
-            charged = False
-            return web.json_response({"ok": False, "error": "Поставщик отклонил заказ: " + str(provider.get("error", "неизвестная ошибка"))}, status=502, headers=cors())
-        provider_id = str(provider["order"])
-        full_name = (str(user.get("first_name", "")) + " " + str(user.get("last_name", ""))).strip() or "Без имени"
-        username = "@" + user["username"] if user.get("username") else "не указан"
-        msg = (f"🛒 <b>Новый заказ принят поставщиком</b>\n\n"
-               f"👤 <b>Пользователь:</b> {escape(full_name)}\n🔹 <b>Username:</b> {escape(username)}\n"
-               f"🆔 <b>ID:</b> <code>{uid}</code>\n\n🌐 <b>Площадка:</b> {escape(str(item.get('network','—')))}\n"
-               f"📁 <b>Категория:</b> {escape(str(item.get('category','—')))}\n⚙️ <b>Услуга:</b> {escape(str(item.get('name','—')))}\n"
-               f"🔢 <b>ID услуги:</b> {sid}\n🔗 <b>Ссылка:</b> {escape(link)}\n📊 <b>Количество:</b> {quantity}\n"
-               f"💰 <b>Списано:</b> {amount:.2f} ₽\n🧾 <b>ID поставщика:</b> <code>{escape(provider_id)}</code>\n"
-               f"💬 Ответить: <code>/send {uid} </code>")
-        try: await bot.send_message(ADMIN_CHAT_ID, msg, parse_mode="HTML")
-        except Exception: log.exception("Admin notification failed")
-        return web.json_response({"ok": True, "provider_id": provider_id,
-                                  "new_balance": float(charge.get("balance", profile.get("balance", 0) - amount))}, headers=cors())
+        return web.json_response(
+            {
+                "ok": True,
+                "balance": float(data.get("balance", 0)),
+                "user": {
+                    "id": user["id"],
+                    "first_name": user.get("first_name", ""),
+                    "username": user.get("username", ""),
+                },
+            },
+            headers=cors(),
+        )
+
     except PermissionError as e:
-        return web.json_response({"ok": False, "error": str(e)}, status=403, headers=cors())
+        log.warning("USER_INFO FORBIDDEN: %s", e)
+        return web.json_response(
+            {"ok": False, "error": str(e)},
+            status=403,
+            headers=cors(),
+        )
+
     except Exception as e:
-        log.exception("Order processing failed")
-        # Не возвращаем деньги при сетевом таймауте к поставщику: статус мог быть принят.
-        return web.json_response({"ok": False, "error": str(e)}, status=500, headers=cors())
+        log.exception("USER_INFO ERROR")
+        return web.json_response(
+            {
+                "ok": False,
+                "error": f"{type(e).__name__}: {e}",
+            },
+            status=400,
+            headers=cors(),
+        )
 
 
 async def topup_request(request):
