@@ -17,17 +17,134 @@ let services=[], network=null, category=null, selected=null, balance=0, busy=fal
 const money=n=>Number(n).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' ₽';
 function toast(s){$('toast').textContent=s;$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,4500)}
 function el(tag,text,cls){const x=document.createElement(tag);if(text!==undefined)x.textContent=text;if(cls)x.className=cls;return x}
-async function api(path,payload){const r=await fetch(API+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok||!d.ok)throw Error(d.error||`HTTP ${r.status}`);return d}
-function auth(){return tg?.initData||''}
-async function refreshBalance(){if(!auth()){$('balance').textContent='Открой в Telegram';return}try{const d=await api('/api/user/info',{initData:auth()});balance=Number(d.balance||0);$('balance').textContent=money(balance)}catch(e){$('balance').textContent='Ошибка';console.error(e)}}
+
+async function api(path,payload){
+  const r=await fetch(API+path,{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(payload)
+  });
+  const text=await r.text();
+  let d;
+  try {
+    d=JSON.parse(text);
+  } catch(e) {
+    throw Error(`HTTP ${r.status}. Ответ не JSON:\n${text.slice(0,400)}`);
+  }
+  if(!r.ok||!d.ok) throw Error(d.error||`HTTP ${r.status}`);
+  return d;
+}
+
+function auth(){
+  if(tg?.initData && tg.initData.length>0) return tg.initData;
+  if(location.hash && location.hash.length>1){
+    const p=new URLSearchParams(location.hash.substring(1));
+    const h=p.get('tgWebAppData');
+    if(h) return h;
+    if(location.hash.includes('hash=')&&location.hash.includes('auth_date=')) return location.hash.substring(1);
+  }
+  return '';
+}
+
+async function refreshBalance(){
+  const initData=auth();
+  if(!initData){
+    $('balance').textContent='Не в Telegram';
+    toast('Внимание: Telegram не передал initData. Откройте через кнопку в боте.');
+    return;
+  }
+  try{
+    const d=await api('/api/user/info',{initData:initData});
+    balance=Number(d.balance||0);
+    $('balance').textContent=money(balance);
+  }catch(e){
+    $('balance').textContent='Ошибка';
+    toast('Ошибка баланса: '+e.message);
+    alert('Сервер вернул ошибку при получении баланса:\n\n'+e.message);
+    console.error(e);
+  }
+}
+
 function card(title,sub,cb,net,price){const b=el('button',undefined,'card');b.type='button';if(net){const i=el('span',net.slice(0,2).toUpperCase(),'icon'),file=ICONS[net];if(file){const im=new Image();im.alt='';im.onload=()=>i.replaceChildren(im);im.src='./'+file}b.append(i)}const info=el('span',undefined,'card-info');info.append(el('span',title,'title'),el('span',sub,'subtitle'));if(price)info.append(el('span',price,'price'));b.append(info,el('span','›'));b.onclick=cb;return b}
 function render(){$('back').hidden=!network;$('heading').textContent=!network?'Выберите соцсеть':(category||network+': категории');const q=$('search').value.trim().toLowerCase(),g=$('grid');g.replaceChildren();if(!network){for(const n of [...new Set(services.map(s=>s.network))].sort((a,b)=>a.localeCompare(b,'ru')).filter(n=>n.toLowerCase().includes(q))){const a=services.filter(s=>s.network===n);g.append(card(n,`Услуг: ${a.length}`,()=>{network=n;category=null;$('search').value='';render()},n))}}else if(!category){const a=services.filter(s=>s.network===network),cats=[...new Set(a.map(s=>s.category))].sort((x,y)=>x.localeCompare(y,'ru'));for(const c of cats.filter(x=>x.toLowerCase().includes(q)))g.append(card(c,`Услуг: ${a.filter(s=>s.category===c).length}`,()=>{category=c;$('search').value='';render()}))}else{for(const s of services.filter(s=>s.network===network&&s.category===category&&(s.name+' '+s.service).toLowerCase().includes(q)))g.append(card(s.name,`ID ${s.service} · ${s.min}–${s.max}`,()=>openOrder(s),null,money(s.rate)+' / 1000'))}const count=g.children.length;$('counter').textContent=`Показано: ${count}`;if(!count)g.append(el('p','Ничего не найдено','empty'))}
 function openOrder(s){selected=s;$('serviceName').textContent=s.name;$('serviceMeta').textContent=`${s.network} · ${s.category} · ID ${s.service}`;$('description').textContent=s.description||'Описание не предоставлено';$('link').value='';$('quantity').min=s.min;$('quantity').max=s.max;$('quantity').value=s.min;$('limits').textContent=`(${s.min}–${s.max})`;$('orderStatus').textContent='';price();$('orderOverlay').hidden=false}
 function price(){if(!selected)return;const q=Number($('quantity').value),valid=/^\d+$/.test($('quantity').value)&&Number.isSafeInteger(q)&&q>=Number(selected.min)&&q<=Number(selected.max);$('quantity').setCustomValidity(valid?'':`Количество от ${selected.min} до ${selected.max}`);$('total').textContent=valid?money(Number(selected.rate)*q/1000):'—'}
-$('orderForm').onsubmit=async e=>{e.preventDefault();if(busy||!selected)return;price();if(!e.currentTarget.reportValidity())return;if(!auth()){ $('orderStatus').textContent='Открой Mini App через Telegram.';return}busy=true;$('submit').disabled=true;$('orderStatus').textContent='Проверяем баланс и отправляем заказ…';try{const d=await api('/api/order',{initData:auth(),order:{service:selected.service,quantity:Number($('quantity').value),link:$('link').value.trim()}});balance=Number(d.new_balance);$('balance').textContent=money(balance);$('orderStatus').textContent=`Заказ принят поставщиком. ID: ${d.provider_id}. Остаток: ${money(balance)}`;toast('Заказ оформлен');setTimeout(()=>{$('orderOverlay').hidden=true},2500)}catch(err){$('orderStatus').textContent='Ошибка: '+err.message}finally{busy=false;$('submit').disabled=false}};
-$('quantity').oninput=price;$('closeOrder').onclick=()=>$('orderOverlay').hidden=true;$('openTopup').onclick=()=>$('topupOverlay').hidden=false;$('closeTopup').onclick=()=>$('topupOverlay').hidden=true;
-$('createTopup').onclick=async()=>{try{if(!auth())throw Error('Открой Mini App через Telegram');const d=await api('/api/topup',{initData:auth(),amount:Number($('topupAmount').value),method:$('topupMethod').value});$('topupStatus').textContent=d.message;toast('Запрос отправлен администратору')}catch(e){$('topupStatus').textContent='Ошибка: '+e.message}};
-$('search').oninput=render;$('home').onclick=()=>{network=null;category=null;$('search').value='';render()};$('back').onclick=()=>{if(category)category=null;else network=null;$('search').value='';render()};
-tg?.ready();tg?.expand();refreshBalance();
-(async()=>{try{const r=await fetch('./services.json?v='+Date.now());if(!r.ok)throw Error('services.json HTTP '+r.status);const d=await r.json();if(!Array.isArray(d)||!d.length)throw Error('services.json не массив или пуст');services=d.map(s=>({...s,network:String(s.network||'Без сети'),category:String(s.category||'Прочее'),name:String(s.name||'Услуга')}));render()}catch(e){$('heading').textContent='Ошибка загрузки каталога';$('grid').append(el('p',e.message,'empty'))}})();
+
+$('orderForm').onsubmit=async e=>{
+  e.preventDefault();
+  if(busy||!selected)return;
+  price();
+  if(!e.currentTarget.reportValidity())return;
+  const initData=auth();
+  if(!initData){
+    $('orderStatus').textContent='Открой Mini App через Telegram.';
+    return;
+  }
+  busy=true;
+  $('submit').disabled=true;
+  $('orderStatus').textContent='Проверяем баланс и отправляем заказ…';
+  try{
+    const d=await api('/api/order',{
+      initData:initData,
+      order:{
+        service:selected.service,
+        quantity:Number($('quantity').value),
+        link:$('link').value.trim()
+      }
+    });
+    balance=Number(d.new_balance);
+    $('balance').textContent=money(balance);
+    $('orderStatus').textContent=`Заказ принят поставщиком. ID: ${d.provider_id}. Остаток: ${money(balance)}`;
+    toast('Заказ оформлен');
+    setTimeout(()=>{$('orderOverlay').hidden=true},2500);
+  }catch(err){
+    $('orderStatus').textContent='Ошибка: '+err.message;
+  }finally{
+    busy=false;
+    $('submit').disabled=false;
+  }
+};
+
+$('quantity').oninput=price;
+$('closeOrder').onclick=()=>$('orderOverlay').hidden=true;
+$('openTopup').onclick=()=>$('topupOverlay').hidden=false;
+$('closeTopup').onclick=()=>$('topupOverlay').hidden=true;
+
+$('createTopup').onclick=async()=>{
+  try{
+    const initData=auth();
+    if(!initData)throw Error('Открой Mini App через Telegram');
+    const d=await api('/api/topup',{
+      initData:initData,
+      amount:Number($('topupAmount').value),
+      method:$('topupMethod').value
+    });
+    $('topupStatus').textContent=d.message;
+    toast('Запрос отправлен администратору');
+  }catch(e){
+    $('topupStatus').textContent='Ошибка: '+e.message;
+  }
+};
+
+$('search').oninput=render;
+$('home').onclick=()=>{network=null;category=null;$('search').value='';render()};
+$('back').onclick=()=>{if(category)category=null;else network=null;$('search').value='';render()};
+
+tg?.ready();
+tg?.expand();
+refreshBalance();
+
+(async()=>{
+  try{
+    const r=await fetch('./services.json?v='+Date.now());
+    if(!r.ok)throw Error('services.json HTTP '+r.status);
+    const d=await r.json();
+    if(!Array.isArray(d)||!d.length)throw Error('services.json не массив или пуст');
+    services=d.map(s=>({...s,network:String(s.network||'Без сети'),category:String(s.category||'Прочее'),name:String(s.name||'Услуга')}));
+    render();
+  }catch(e){
+    $('heading').textContent='Ошибка загрузки каталога';
+    $('grid').append(el('p',e.message,'empty'));
+  }
+})();
 </script></body></html>
