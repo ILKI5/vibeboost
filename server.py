@@ -9,7 +9,7 @@ from pathlib import Path
 from urllib.parse import parse_qsl
 from html import escape
 from decimal import Decimal, ROUND_HALF_UP
-from typing import Optional
+from typing import Optional, Dict, List
 
 from aiohttp import web, ClientSession, ClientTimeout
 from aiogram import Bot, Dispatcher, types, F
@@ -42,6 +42,60 @@ PAGE_SIZE = 6
 bot = Bot(BOT_TOKEN)
 dp = Dispatcher()
 http: ClientSession | None = None
+
+# =====================================================================
+# IN-MEMORY КЭШ КАТАЛОГА (ОТВЕТ В ПАМЯТИ ЗА < 1 МС)
+# =====================================================================
+CATALOG_BY_ID: Dict[str, dict] = {}
+NETWORKS_LIST: List[tuple[str, int]] = []  # [(network_name, count), ...]
+SERVICES_BY_NET: Dict[str, List[dict]] = {}
+
+def init_catalog_cache():
+    """Загружает и индексирует каталог в память один раз при старте."""
+    global CATALOG_BY_ID, NETWORKS_LIST, SERVICES_BY_NET
+    if not CATALOG_PATH.exists():
+        log.warning("Файл каталога %s не найден при инициализации!", CATALOG_PATH)
+        return
+
+    try:
+        data = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
+        if not isinstance(data, list):
+            log.error("services.json должен быть списком!")
+            return
+
+        cat_by_id = {}
+        by_net: Dict[str, List[dict]] = {}
+
+        for item in data:
+            if isinstance(item, dict) and item.get("service") is not None:
+                sid = str(item["service"])
+                net = str(item.get("network") or "Прочее")
+                cat_by_id[sid] = item
+                if net not in by_net:
+                    by_net[net] = []
+                by_net[net].append(item)
+
+        # Сортируем услуги внутри каждой соцсети заранее один раз
+        for net in by_net:
+            by_net[net].sort(key=lambda x: str(x.get("name", "")).casefold())
+
+        # Формируем отсортированный реестр соцсетей
+        sorted_nets = sorted(by_net.keys(), key=str.casefold)
+        net_list = [(net, len(by_net[net])) for net in sorted_nets]
+
+        CATALOG_BY_ID = cat_by_id
+        NETWORKS_LIST = net_list
+        SERVICES_BY_NET = by_net
+        log.info("Каталог успешно загружен в RAM: %d услуг, %d соцсетей.", len(cat_by_id), len(net_list))
+    except Exception as exc:
+        log.exception("Ошибка инициализации каталога: %s", exc)
+
+# Инициализируем при импорте модуля
+init_catalog_cache()
+
+def get_service(service_id: str) -> Optional[dict]:
+    return CATALOG_BY_ID.get(str(service_id))
+
 
 # Реестр премиум-эмодзи площадок tgiosicons
 PREMIUM_EMOJI_IDS = {
@@ -105,7 +159,6 @@ class BotSupport(StatesGroup):
 
 
 def tg_icon(name: str) -> str:
-    """Генерирует HTML-разметку премиум-эмодзи для текста сообщений."""
     emoji_id = PREMIUM_EMOJI_IDS.get(name)
     if emoji_id:
         return f'<tg-emoji emoji-id="{emoji_id}">•</tg-emoji>'
@@ -141,16 +194,6 @@ def validate_init_data(raw: str) -> dict:
     if not user.get("id"):
         raise ValueError("В initData отсутствует пользователь")
     return user
-
-
-def load_catalog() -> dict:
-    try:
-        data = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
-    except Exception as exc:
-        raise RuntimeError(f"Каталог недоступен: {exc}") from exc
-    if not isinstance(data, list):
-        raise RuntimeError("services.json должен быть массивом")
-    return {str(x["service"]): x for x in data if isinstance(x, dict) and x.get("service") is not None}
 
 
 def format_money(value):
@@ -275,11 +318,10 @@ async def execute_provider_order(user_id: int, item: dict, link: str, quantity: 
 
 
 # =====================================================================
-# КЛАВИАТУРЫ С ICON_CUSTOM_EMOJI_ID (BOT API 9.4+)
+# КЛАВИАТУРЫ (МОМЕНТАЛЬНЫЙ РЕНДЕР ИЗ RAM)
 # =====================================================================
 
 def make_btn(text: str, callback_data: str | None = None, emoji_id: str | None = None, web_app: WebAppInfo | None = None) -> InlineKeyboardButton:
-    """Создаёт кнопку с явной строковой передачей icon_custom_emoji_id."""
     kwargs = {"text": text}
     if callback_data is not None:
         kwargs["callback_data"] = callback_data
@@ -306,19 +348,11 @@ def main_menu_kb():
     ])
 
 
-def _catalog_networks():
-    catalog = load_catalog()
-    return sorted({str(x.get("network") or "Прочее") for x in catalog.values()}, key=str.casefold)
-
-
 def networks_kb():
-    """Сетка соцсетей СТРОГО В ДВА СТОЛБЦА с icon_custom_emoji_id."""
-    catalog = load_catalog()
-    networks = _catalog_networks()
+    """Сетка соцсетей СТРОГО В ДВА СТОЛБЦА (готовые данные из RAM)."""
     buttons = []
     row = []
-    for index, net in enumerate(networks):
-        count = sum(1 for x in catalog.values() if str(x.get("network") or "Прочее") == net)
+    for index, (net, count) in enumerate(NETWORKS_LIST):
         emoji_id = PREMIUM_EMOJI_IDS.get(net)
         btn = make_btn(text=f"{net} · {count}", callback_data=f"net:{index}", emoji_id=emoji_id)
         row.append(btn)
@@ -336,21 +370,20 @@ def networks_kb():
 
 
 def services_by_network_kb(net_idx: int, page: int = 0):
-    """Список услуг выбранной соц.сети напрямую (с пагинацией)."""
-    catalog = load_catalog()
-    networks = _catalog_networks()
-    if not (0 <= net_idx < len(networks)):
+    """Список услуг без повторного парсинга файла."""
+    if not NETWORKS_LIST:
+        return "Прочее", [], 1, 0, InlineKeyboardMarkup(inline_keyboard=[])
+
+    if not (0 <= net_idx < len(NETWORKS_LIST)):
         net_idx = 0
-    net = networks[net_idx]
+    net, _ = NETWORKS_LIST[net_idx]
 
-    items = [x for x in catalog.values() if str(x.get("network") or "Прочее") == net]
-    items.sort(key=lambda x: str(x.get("name", "")).casefold())
-
+    items = SERVICES_BY_NET.get(net, [])
     pages = max(1, (len(items) + PAGE_SIZE - 1) // PAGE_SIZE)
     page = max(0, min(page, pages - 1))
 
     buttons = []
-    for item in items[page * PAGE_SIZE:(page + 1) * PAGE_SIZE]:
+    for item in items[page * PAGE_SIZE : (page + 1) * PAGE_SIZE]:
         name = str(item.get("name", "Услуга"))
         price = format_unit_price(item.get("rate", 0))
         btn_caption = f"{name[:34]} · {price}/шт"
@@ -393,7 +426,6 @@ async def cmd_start(message: types.Message, state: FSMContext):
 @dp.callback_query(F.data == "bot:menu")
 async def cb_main_menu(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
-    user = callback.from_user
     text = (
         f"👋 <b>Главное меню VibeBoost</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
@@ -473,7 +505,6 @@ async def cb_cat_home(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-# Переход при клике на соц.сеть -> сразу открывает список услуг выбранной площадки
 @dp.callback_query(F.data.startswith("net:"))
 async def cb_choose_network(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
@@ -521,7 +552,7 @@ async def cb_service_card(callback: types.CallbackQuery, state: FSMContext):
     net_idx = parts[2] if len(parts) > 2 else "0"
     page = parts[3] if len(parts) > 3 else "0"
 
-    item = load_catalog().get(srv_id)
+    item = get_service(srv_id)
     if not item:
         await callback.answer("Услуга не найдена", show_alert=True)
         return
@@ -560,7 +591,7 @@ async def cb_service_card(callback: types.CallbackQuery, state: FSMContext):
 @dp.callback_query(F.data.startswith("order:"))
 async def cb_start_order(callback: types.CallbackQuery, state: FSMContext):
     srv_id = callback.data.split(":")[1]
-    item = load_catalog().get(srv_id)
+    item = get_service(srv_id)
     if not item:
         await callback.answer("Услуга недоступна", show_alert=True)
         return
@@ -594,7 +625,7 @@ async def process_link(message: types.Message, state: FSMContext):
         await message.answer("⚠️ Пожалуйста, отправьте корректную ссылку:")
         return
     data = await state.get_data()
-    item = load_catalog().get(str(data.get("order_service_id")))
+    item = get_service(str(data.get("order_service_id")))
     if not item:
         await state.clear()
         await message.answer("Услуга устарела. Откройте каталог /catalog заново.")
@@ -633,7 +664,7 @@ async def process_link(message: types.Message, state: FSMContext):
 async def process_comments(message: types.Message, state: FSMContext):
     lines = [x.strip() for x in (message.text or "").splitlines() if x.strip()]
     data = await state.get_data()
-    item = load_catalog().get(str(data.get("order_service_id")))
+    item = get_service(str(data.get("order_service_id")))
     if not item:
         await state.clear()
         await message.answer("Услуга недоступна.")
@@ -657,7 +688,7 @@ async def process_comments(message: types.Message, state: FSMContext):
 async def process_poll_answer(message: types.Message, state: FSMContext):
     ans = (message.text or "").strip()
     data = await state.get_data()
-    item = load_catalog().get(str(data.get("order_service_id")))
+    item = get_service(str(data.get("order_service_id")))
     if not item:
         await state.clear()
         await message.answer("Услуга недоступна.")
@@ -678,7 +709,7 @@ async def process_qty(message: types.Message, state: FSMContext):
         return
 
     data = await state.get_data()
-    item = load_catalog().get(str(data.get("order_service_id")))
+    item = get_service(str(data.get("order_service_id")))
     if not item:
         await state.clear()
         await message.answer("Услуга недоступна.")
@@ -755,7 +786,7 @@ async def cb_order_cancel(callback: types.CallbackQuery, state: FSMContext):
 @dp.callback_query(F.data == "botorder:confirm", StateFilter(BotOrder.confirming))
 async def cb_order_confirm(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    item = load_catalog().get(str(data.get("order_service_id")))
+    item = get_service(str(data.get("order_service_id")))
     if not item:
         await state.clear()
         await callback.message.edit_text("⚠️ Услуга больше недоступна.")
@@ -920,7 +951,7 @@ async def process_support_question(message: types.Message, state: FSMContext):
 
 
 # ==========================================
-# АДМИН-КОМАНДЫ И ОБРАТНАЯ СВЯЗЬ
+# АДМИН-КОМАНДЫ
 # ==========================================
 
 @dp.message(Command("addbalance"))
@@ -958,6 +989,15 @@ async def cmd_send(message: types.Message):
         await message.reply("✅ Доставлено.")
     except Exception as exc:
         await message.reply(f"Ошибка: {exc}")
+
+
+@dp.message(Command("reload"))
+async def cmd_reload_catalog(message: types.Message):
+    """Команда для админа: перезагрузить каталог из services.json без перезапуска сервера."""
+    if message.from_user.id != ADMIN_CHAT_ID:
+        return
+    init_catalog_cache()
+    await message.reply(f"🔄 Каталог обновлен в памяти: {len(CATALOG_BY_ID)} услуг, {len(NETWORKS_LIST)} соцсетей.")
 
 
 @dp.message(F.chat.type == "private")
@@ -1009,7 +1049,7 @@ async def submit_order(request):
         payload = await request.json()
         u = validate_init_data(str(payload.get("initData", "")))
         o = payload.get("order") or {}
-        item = load_catalog().get(str(o.get("service", "")))
+        item = get_service(str(o.get("service", "")))
         if not item:
             raise ValueError("Услуга не найдена")
         qty = int(o.get("quantity", 0))
