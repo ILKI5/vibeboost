@@ -173,11 +173,11 @@ async def user_info(request):
 
 
 async def send_order_receipt_to_user(user_id: int, order: dict, provider_order_id: str, charged: float, balance_after: float):
-    net_icon = NETWORK_ICONS.get(str(order.get("network")), "🌐")
+    net_icon = ""
     text = (
-        "💎 <b>Ваш заказ успешно оформлен!</b>\n"
+        "<b>Ваш заказ успешно оформлен!</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        f"{net_icon} <b>Площадка:</b> {escape(str(order.get('network', '—')))}\n"
+        f"<b>Площадка:</b> {escape(str(order.get('network', '—')))}\n"
         f"📁 <b>Категория:</b> {escape(str(order.get('category', '—')))}\n"
         f"⚙️ <b>Услуга:</b> {escape(str(order.get('name', '—')))}\n"
         f"🆔 <b>ID услуги:</b> <code>{escape(str(order.get('service', '—')))}</code>\n"
@@ -272,14 +272,14 @@ async def execute_provider_order(user_id: int, item: dict, link: str, quantity: 
         name = "Пользователь"
         username = "не указан"
 
-    net_icon = NETWORK_ICONS.get(str(item.get("network")), "🌐")
+    net_icon = ""
     admin_msg = (
-        "🛒 <b>Новый заказ оформлен</b>\n"
+        "<b>Новый заказ оформлен</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         f"👤 <b>Покупатель:</b> {name}\n"
         f"🔹 <b>Username:</b> {escape(username)}\n"
         f"🆔 <b>ID:</b> <code>{user_id}</code>\n\n"
-        f"{net_icon} <b>Соцсеть:</b> {escape(str(item.get('network', '—')))}\n"
+        f"<b>Соцсеть:</b> {escape(str(item.get('network', '—')))}\n"
         f"📁 <b>Категория:</b> {escape(str(item.get('category', '—')))}\n"
         f"⚙️ <b>Услуга:</b> {escape(str(item.get('name', '—')))}\n"
         f"🔢 <b>ID услуги:</b> <code>{escape(service_id)}</code>\n"
@@ -381,87 +381,93 @@ async def topup_request(request):
 def main_menu_kb():
     buttons = [
         [
-            InlineKeyboardButton(text="⚡ Каталог услуг", callback_data="cat:home"),
-            InlineKeyboardButton(text="👤 Мой профиль", callback_data="bot:profile"),
+            InlineKeyboardButton(text="Каталог услуг", callback_data="cat:home"),
+            InlineKeyboardButton(text="Мой профиль", callback_data="bot:profile"),
         ],
         [
-            InlineKeyboardButton(text="➕ Пополнить баланс", callback_data="bot:topup"),
-            InlineKeyboardButton(text="📱 Mini App", web_app=WebAppInfo(url=WEBAPP_ORIGIN))
+            InlineKeyboardButton(text="Пополнить баланс", callback_data="bot:topup"),
+            InlineKeyboardButton(text="Mini App", web_app=WebAppInfo(url=WEBAPP_ORIGIN))
         ]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def networks_kb():
-    """Сетка соцсетей СТРОГО В ДВА СТОЛБЦА с премиальными иконками."""
+def _catalog_networks():
     catalog = load_catalog()
-    raw_nets = sorted({str(x.get("network") or "Прочее") for x in catalog.values()}, key=str.casefold)
+    return sorted({str(x.get("network") or "Прочее") for x in catalog.values()}, key=str.casefold)
 
-    # Формируем кнопки
+
+def _catalog_categories(network: str):
+    catalog = load_catalog()
+    return sorted({str(x.get("category") or "Прочее") for x in catalog.values()
+                   if str(x.get("network") or "Прочее") == network}, key=str.casefold)
+
+
+def _callback_token(prefix: str, index: int) -> str:
+    return f"{prefix}:{index}"
+
+
+def networks_kb():
+    """Каталог: соцсети в два столбца. Callback передаёт индекс, не длинное имя."""
+    catalog = load_catalog()
+    networks = sorted({str(x.get("network") or "Прочее") for x in catalog.values()}, key=str.casefold)
     buttons = []
     row = []
-    for net in raw_nets:
-        icon = NETWORK_ICONS.get(net, "💎")
-        btn = InlineKeyboardButton(text=f"{icon} {net}", callback_data=f"cat:net:{net}")
+    for index, net in enumerate(networks):
+        count = sum(1 for x in catalog.values() if str(x.get("network") or "Прочее") == net)
+        btn = InlineKeyboardButton(text=f"{net} · {count}", callback_data=_callback_token("net", index))
         row.append(btn)
         if len(row) == 2:
             buttons.append(row)
             row = []
     if row:
         buttons.append(row)
-
     buttons.append([
-        InlineKeyboardButton(text="👤 Профиль", callback_data="bot:profile"),
-        InlineKeyboardButton(text="✖️ Закрыть", callback_data="cat:close")
+        InlineKeyboardButton(text="Профиль", callback_data="bot:profile"),
+        InlineKeyboardButton(text="Закрыть", callback_data="cat:close")
     ])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def categories_kb(network: str):
     catalog = load_catalog()
-    cats = sorted({str(x.get("category") or "Прочее") for x in catalog.values()
-                   if str(x.get("network") or "Прочее") == network}, key=str.casefold)
-
+    categories = sorted({str(x.get("category") or "Прочее") for x in catalog.values()
+                         if str(x.get("network") or "Прочее") == network}, key=str.casefold)
     buttons = []
-    # Категории тоже формируем компактно по 1-2 в ряд
-    for cat in cats:
+    for index, category in enumerate(categories):
         count = sum(1 for x in catalog.values()
-                    if str(x.get("network") or "Прочее") == network and str(x.get("category") or "Прочее") == cat)
-        buttons.append([InlineKeyboardButton(text=f"📁 {cat} · {count}", callback_data=f"cat:cat:{cat}")])
-
-    buttons.append([InlineKeyboardButton(text="🔙 Назад к соцсетям", callback_data="cat:home")])
+                    if str(x.get("network") or "Прочее") == network
+                    and str(x.get("category") or "Прочее") == category)
+        # Index callback keeps payload within Telegram's 64-byte limit.
+        buttons.append([InlineKeyboardButton(text=f"{category} · {count}", callback_data=_callback_token("category", index))])
+    buttons.append([InlineKeyboardButton(text="Назад к соцсетям", callback_data="cat:home")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def services_kb(network: str, category: str, page: int = 0):
     catalog = load_catalog()
     items = [x for x in catalog.values()
-             if str(x.get("network") or "Прочее") == network and str(x.get("category") or "Прочее") == category]
+             if str(x.get("network") or "Прочее") == network
+             and str(x.get("category") or "Прочее") == category]
     items.sort(key=lambda x: str(x.get("name", "")).casefold())
-
     pages = max(1, (len(items) + PAGE_SIZE - 1) // PAGE_SIZE)
     page = max(0, min(page, pages - 1))
-
     buttons = []
     for item in items[page * PAGE_SIZE:(page + 1) * PAGE_SIZE]:
         name = str(item.get("name", "Услуга"))
         unit_price = format_unit_price(item.get("rate", 0))
-        btn_text = f"✨ {name[:34]} · {unit_price}/шт"
-        buttons.append([InlineKeyboardButton(text=btn_text[:60], callback_data=f"cat:srv:{item['service']}")])
-
-    # Пагинация
+        btn_text = f"{name[:38]} · {unit_price}/шт"
+        buttons.append([InlineKeyboardButton(text=btn_text[:60], callback_data=f"srv:{item['service']}")])
     nav = []
     if page > 0:
-        nav.append(InlineKeyboardButton(text="⬅️ Назад", callback_data=f"cat:page:{page-1}"))
-    nav.append(InlineKeyboardButton(text=f"📄 {page+1}/{pages}", callback_data="cat:noop"))
+        nav.append(InlineKeyboardButton(text="Назад", callback_data=f"page:{page-1}"))
+    nav.append(InlineKeyboardButton(text=f"{page+1}/{pages}", callback_data="cat:noop"))
     if page + 1 < pages:
-        nav.append(InlineKeyboardButton(text="Вперёд ➡️", callback_data=f"cat:page:{page+1}"))
-    if nav:
-        buttons.append(nav)
-
+        nav.append(InlineKeyboardButton(text="Вперёд", callback_data=f"page:{page+1}"))
+    buttons.append(nav)
     buttons.append([
-        InlineKeyboardButton(text="📁 Категории", callback_data=f"cat:back_cats:{network}"),
-        InlineKeyboardButton(text="🌐 Соцсети", callback_data="cat:home")
+        InlineKeyboardButton(text="Категории", callback_data="cat:back_cats"),
+        InlineKeyboardButton(text="Соцсети", callback_data="cat:home")
     ])
     return items, pages, page, InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -481,7 +487,7 @@ def service_card_text(item: dict) -> str:
         type_badge = "\n🎯 <i>Тип услуги: Голосование в опросе</i>"
 
     return (
-        f"{net_icon} <b>{escape(str(item.get('name', 'Услуга')))}</b>\n"
+        f"<b>{escape(str(item.get('name', 'Услуга')))}</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         f"🌐 <b>Площадка:</b> {escape(str(item.get('network', '—')))}\n"
         f"📁 <b>Категория:</b> {escape(str(item.get('category', '—')))}\n"
@@ -497,10 +503,10 @@ def service_card_kb(item: dict) -> InlineKeyboardMarkup:
     network = str(item.get("network", ""))
     category = str(item.get("category", ""))
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🚀 Заказать услугу", callback_data=f"cat:order:{service_id}")],
+        [InlineKeyboardButton(text="Заказать услугу", callback_data=f"cat:order:{service_id}")],
         [
-            InlineKeyboardButton(text="🔙 К списку", callback_data=f"cat:cat:{category}"),
-            InlineKeyboardButton(text="🌐 Соцсети", callback_data="cat:home")
+            InlineKeyboardButton(text="К списку", callback_data=f"cat:cat:{category}"),
+            InlineKeyboardButton(text="Соцсети", callback_data="cat:home")
         ]
     ])
 
@@ -514,7 +520,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
     await state.clear()
     user = message.from_user
     text = (
-        f"👋 <b>Добро пожаловать в VibeBoost, {escape(user.first_name)}!</b>\n"
+        f"<b>Добро пожаловать в VibeBoost, {escape(user.first_name)}!</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Мы предоставляем автоматическое продвижение в топ для всех социальных сетей.\n\n"
         "✨ Выберите действие ниже или откройте удобное Mini App:"
@@ -561,11 +567,11 @@ async def show_profile(chat_id: int, user: types.User, message_to_edit: types.Me
     )
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="➕ Пополнить баланс", callback_data="bot:topup"),
-            InlineKeyboardButton(text="⚡ Каталог услуг", callback_data="cat:home")
+            InlineKeyboardButton(text="Пополнить баланс", callback_data="bot:topup"),
+            InlineKeyboardButton(text="Каталог услуг", callback_data="cat:home")
         ],
         [
-            InlineKeyboardButton(text="📱 Открыть Mini App", web_app=WebAppInfo(url=WEBAPP_ORIGIN)),
+            InlineKeyboardButton(text="Открыть Mini App", web_app=WebAppInfo(url=WEBAPP_ORIGIN)),
             InlineKeyboardButton(text="🔄 Обновить", callback_data="bot:profile")
         ]
     ])
@@ -583,7 +589,7 @@ async def show_profile(chat_id: int, user: types.User, message_to_edit: types.Me
 async def cb_start_topup(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(BotTopup.waiting_amount)
     await callback.message.edit_text(
-        "💳 <b>Пополнение баланса</b>\n"
+        "<b>Пополнение баланса</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Введите желаемую сумму пополнения в рублях (от 10 до 100 000 ₽).\n\n"
         "Для отмены отправьте /cancel",
@@ -607,10 +613,10 @@ async def process_topup_amount(message: types.Message, state: FSMContext):
     await state.set_state(BotTopup.waiting_method)
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💳 СБП / Карта РФ", callback_data="topup_m:СБП / Карта РФ")],
-        [InlineKeyboardButton(text="💎 Криптовалюта (USDT / TON)", callback_data="topup_m:Криптовалюта")],
+        [InlineKeyboardButton(text="СБП / Карта РФ", callback_data="topup_m:СБП / Карта РФ")],
+        [InlineKeyboardButton(text="Криптовалюта (USDT / TON)", callback_data="topup_m:Криптовалюта")],
         [InlineKeyboardButton(text="🌍 Другой способ", callback_data="topup_m:Другой способ")],
-        [InlineKeyboardButton(text="❌ Отмена", callback_data="cat:home")]
+        [InlineKeyboardButton(text="Отмена", callback_data="cat:home")]
     ])
     await message.answer(
         f"💰 Выбрана сумма: <b>{format_money(amount)}</b>\n"
@@ -682,65 +688,69 @@ async def cb_cat_close(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@dp.callback_query(F.data.startswith("cat:net:"))
+@dp.callback_query(F.data.startswith("net:"))
 async def cb_choose_network(callback: types.CallbackQuery, state: FSMContext):
-    network = callback.data.split(":", 2)[2]
-    await state.update_data(current_network=network)
-    icon = NETWORK_ICONS.get(network, "💎")
+    try:
+        index = int(callback.data.split(":", 1)[1])
+        networks = _catalog_networks()
+        network = networks[index]
+    except (ValueError, IndexError):
+        await callback.answer("Соцсеть не найдена. Откройте каталог заново.", show_alert=True)
+        return
+    await state.update_data(current_network=network, current_category=None, current_page=0)
     kb = categories_kb(network)
     await callback.message.edit_text(
-        f"{icon} <b>{escape(network)}</b> — выберите категорию услуг:",
+        f"<b>{escape(network)}</b> — выберите категорию услуг:",
         reply_markup=kb,
         parse_mode="HTML"
     )
     await callback.answer()
 
 
-@dp.callback_query(F.data.startswith("cat:back_cats:"))
+@dp.callback_query(F.data == "cat:back_cats")
 async def cb_back_to_cats(callback: types.CallbackQuery, state: FSMContext):
-    network = callback.data.split(":", 2)[2]
-    await state.update_data(current_network=network)
-    icon = NETWORK_ICONS.get(network, "💎")
-    kb = categories_kb(network)
-    await callback.message.edit_text(
-        f"{icon} <b>{escape(network)}</b> — выберите категорию услуг:",
-        reply_markup=kb,
-        parse_mode="HTML"
-    )
-    await callback.answer()
-
-
-@dp.callback_query(F.data.startswith("cat:cat:"))
-async def cb_choose_category(callback: types.CallbackQuery, state: FSMContext):
-    category = callback.data.split(":", 2)[2]
     data = await state.get_data()
     network = data.get("current_network")
-
-    # Если network потерялся в state, ищем по услугам
     if not network:
-        catalog = load_catalog()
-        for x in catalog.values():
-            if str(x.get("category")) == category:
-                network = str(x.get("network"))
-                break
-        network = network or "Telegram"
-        await state.update_data(current_network=network)
+        await callback.answer("Выберите соцсеть заново.", show_alert=True)
+        return
+    await callback.message.edit_text(
+        f"<b>{escape(network)}</b> — выберите категорию услуг:",
+        reply_markup=categories_kb(network),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("category:"))
+async def cb_choose_category(callback: types.CallbackQuery, state: FSMContext):
+    try:
+        index = int(callback.data.split(":", 1)[1])
+        data = await state.get_data()
+        network = data.get("current_network")
+        if not network:
+            await callback.answer("Сначала выберите соцсеть.", show_alert=True)
+            return
+        categories = _catalog_categories(network)
+        category = categories[index]
+    except (ValueError, IndexError):
+        await callback.answer("Категория не найдена. Откройте раздел заново.", show_alert=True)
+        return
 
     await state.update_data(current_category=category, current_page=0)
     items, pages, page, kb = services_kb(network, category, 0)
-    icon = NETWORK_ICONS.get(network, "💎")
     await callback.message.edit_text(
-        f"{icon} <b>{escape(network)} · {escape(category)}</b>\n"
-        f"Выберите интересующую услугу (страница {page+1}/{pages}):",
+        f"<b>{escape(network)} · {escape(category)}</b>\n"
+        f"Выберите услугу (страница {page+1}/{pages}):",
         reply_markup=kb,
         parse_mode="HTML"
     )
     await callback.answer()
 
 
-@dp.callback_query(F.data.startswith("cat:page:"))
+@dp.callback_query(F.data.startswith("page:"))
 async def cb_services_page(callback: types.CallbackQuery, state: FSMContext):
-    page = int(callback.data.split(":", 2)[2])
+    page = int(callback.data.split(":", 1)[1])
     data = await state.get_data()
     network = data.get("current_network", "Telegram")
     category = data.get("current_category", "Подписчики")
@@ -762,9 +772,9 @@ async def cb_noop(callback: types.CallbackQuery):
     await callback.answer()
 
 
-@dp.callback_query(F.data.startswith("cat:srv:"))
+@dp.callback_query(F.data.startswith("srv:"))
 async def cb_service_card(callback: types.CallbackQuery, state: FSMContext):
-    service_id = callback.data.split(":", 2)[2]
+    service_id = callback.data.split(":", 1)[1]
     item = load_catalog().get(service_id)
     if not item:
         await callback.answer("Услуга не найдена или устарела.", show_alert=True)
@@ -798,7 +808,7 @@ async def cb_start_order(callback: types.CallbackQuery, state: FSMContext):
     unit_price = format_unit_price(item.get("rate", 0))
 
     await callback.message.answer(
-        f"{net_icon} <b>Оформление заказа:</b>\n"
+        f"<b>Оформление заказа:</b>\n"
         f"«{escape(str(item.get('name')))}»\n"
         f"Цена за 1 шт: <code>{unit_price}</code>\n"
         f"Лимиты: от <code>{item['min']}</code> до <code>{item['max']}</code> шт.\n"
@@ -960,9 +970,9 @@ async def show_order_confirmation(message: types.Message, state: FSMContext, ite
     link = data.get("order_link", "—")
 
     text = (
-        "📋 <b>Проверьте данные вашего заказа:</b>\n"
+        "<b>Проверьте данные вашего заказа:</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        f"{net_icon} <b>Услуга:</b> {escape(str(item.get('name')))}\n"
+        f"<b>Услуга:</b> {escape(str(item.get('name')))}\n"
         f"🌐 <b>Площадка:</b> {escape(str(item.get('network')))} · {escape(str(item.get('category')))}\n"
         f"🔗 <b>Ссылка:</b> <code>{escape(link)}</code>\n"
         f"📊 <b>Количество:</b> <code>{quantity} шт.</code>\n"
@@ -986,14 +996,14 @@ async def show_order_confirmation(message: types.Message, state: FSMContext, ite
             "Пополните баланс для продолжения."
         )
         kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="➕ Пополнить баланс", callback_data="bot:topup")],
-            [InlineKeyboardButton(text="❌ Отменить", callback_data="botorder:cancel")]
+            [InlineKeyboardButton(text="Пополнить баланс", callback_data="bot:topup")],
+            [InlineKeyboardButton(text="Отменить", callback_data="botorder:cancel")]
         ])
     else:
         text += "\nВсе верно? Нажмите кнопку для запуска накрутки:"
         kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="✅ Подтвердить и оплатить", callback_data="botorder:confirm")],
-            [InlineKeyboardButton(text="❌ Отменить", callback_data="botorder:cancel")]
+            [InlineKeyboardButton(text="Подтвердить и оплатить", callback_data="botorder:confirm")],
+            [InlineKeyboardButton(text="Отменить", callback_data="botorder:cancel")]
         ])
 
     await state.set_state(BotOrder.confirming)
@@ -1038,9 +1048,9 @@ async def cb_confirm_order(callback: types.CallbackQuery, state: FSMContext):
         )
         net_icon = NETWORK_ICONS.get(str(item.get("network")), "💎")
         await callback.message.edit_text(
-            f"🎉 <b>Заказ #{escape(result['provider_id'])} успешно запущен!</b>\n"
+            f"<b>Заказ #{escape(result['provider_id'])} успешно запущен!</b>\n"
             "━━━━━━━━━━━━━━━━━━━━\n"
-            f"{net_icon} <b>Услуга:</b> {escape(str(item.get('name')))}\n"
+            f"<b>Услуга:</b> {escape(str(item.get('name')))}\n"
             f"📊 <b>Количество:</b> <code>{quantity} шт.</code>\n"
             f"💰 <b>Списано:</b> <code>{format_money(result['charge'])}</code>\n"
             f"💳 <b>Остаток на балансе:</b> <b>{format_money(result['new_balance'])}</b>\n\n"
@@ -1053,12 +1063,12 @@ async def cb_confirm_order(callback: types.CallbackQuery, state: FSMContext):
         err_msg = str(exc)
         if "недостаточно" in err_msg.lower() or "insufficient" in err_msg.lower():
             text = (
-                "❌ <b>Недостаточно средств на балансе!</b>\n\n"
+                "<b>Недостаточно средств на балансе!</b>\n\n"
                 "Пожалуйста, пополните баланс профиля и повторите попытку."
             )
             kb = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="➕ Пополнить баланс", callback_data="bot:topup")],
-                [InlineKeyboardButton(text="⚡ В каталог", callback_data="cat:home")]
+                [InlineKeyboardButton(text="Пополнить баланс", callback_data="bot:topup")],
+                [InlineKeyboardButton(text="В каталог", callback_data="cat:home")]
             ])
             await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
         else:
