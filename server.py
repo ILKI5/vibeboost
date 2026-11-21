@@ -9,6 +9,7 @@ from pathlib import Path
 from urllib.parse import parse_qsl
 from html import escape
 from decimal import Decimal, ROUND_HALF_UP
+from typing import Optional
 
 from aiohttp import web, ClientSession, ClientTimeout
 from aiogram import Bot, Dispatcher, types, F
@@ -17,9 +18,13 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from aiogram.types import (
     InlineKeyboardMarkup,
-    InlineKeyboardButton,
     WebAppInfo,
 )
+from aiogram.types import InlineKeyboardButton as _BaseInlineKeyboardButton
+
+# Расширение модели для гарантированной сериализации icon_custom_emoji_id (Bot API 9.4+)
+class InlineKeyboardButton(_BaseInlineKeyboardButton):
+    icon_custom_emoji_id: Optional[str] = None
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 log = logging.getLogger("vibeboost")
@@ -38,7 +43,7 @@ bot = Bot(BOT_TOKEN)
 dp = Dispatcher()
 http: ClientSession | None = None
 
-# Реестр премиум-эмодзи из tgiosicons
+# Реестр премиум-эмодзи tgiosicons (строковые ID)
 PREMIUM_EMOJI_IDS = {
     "Авито": "5206315603379373105",
     "Дзен": "5359312848247857963",
@@ -76,29 +81,11 @@ PREMIUM_EMOJI_IDS = {
     "YouTube": "5454010052421626926",
 }
 
-# Иконки для кнопок в стиле скриншота пользователя
-NETWORK_BUTTON_ICONS = {
-    "Telegram": "✈️",
-    "ВКонтакте": "🔵",
-    "VK": "🔵",
-    "Instagram": "📸",
-    "TikTok": "🎵",
-    "YouTube": "▶️",
-    "Twitter": "✖️",
-    "Twitter X": "✖️",
-    "Одноклассники": "🟠",
-    "RuTube": "🔴",
-    "Rutube": "🔴",
-    "Twitch": "🟣",
-    "Kick": "🟢",
-    "Авито": "🛍️",
-    "Ozon": "📦",
-    "Wildberries": "🟣",
-    "Яндекс Музыка": "🎧",
-    "Spotify": "🟢",
-    "Steam": "🎮",
-    "MAX": "⚡",
-    "Wibes": "💫",
+# Иконки разделов меню из каталога tgiosicons
+MENU_EMOJI_IDS = {
+    "catalog": "5285350148451344065",
+    "profile": "5357053089859772828",
+    "topup": "5206690180362158433",
 }
 
 class BotOrder(StatesGroup):
@@ -110,16 +97,14 @@ class BotOrder(StatesGroup):
 
 class BotTopup(StatesGroup):
     waiting_amount = State()
-    waiting_method = State()
 
 
 def tg_icon(name: str) -> str:
-    """Генерирует HTML с кастомным премиум-эмодзи."""
+    """Генерирует HTML-разметку премиум-эмодзи для текста сообщений."""
     emoji_id = PREMIUM_EMOJI_IDS.get(name)
-    fallback = NETWORK_BUTTON_ICONS.get(name, "💎")
     if emoji_id:
-        return f'<tg-emoji emoji-id="{emoji_id}">{fallback}</tg-emoji>'
-    return fallback
+        return f'<tg-emoji emoji-id="{emoji_id}">•</tg-emoji>'
+    return "•"
 
 
 def cors_headers():
@@ -284,19 +269,31 @@ async def execute_provider_order(user_id: int, item: dict, link: str, quantity: 
     return {"provider_id": provider_order_id, "new_balance": new_balance, "charge": charge_amount}
 
 
-# ==========================================
-# КЛАВИАТУРЫ В СТИЛЕ СКРИНШОТА ПОЛЬЗОВАТЕЛЯ
-# ==========================================
+# =====================================================================
+# КЛАВИАТУРЫ С ICON_CUSTOM_EMOJI_ID (BOT API 9.4+)
+# =====================================================================
+
+def make_btn(text: str, callback_data: str | None = None, emoji_id: str | None = None, web_app: WebAppInfo | None = None) -> InlineKeyboardButton:
+    """Создаёт кнопку с явной строковой передачей icon_custom_emoji_id."""
+    kwargs = {"text": text}
+    if callback_data is not None:
+        kwargs["callback_data"] = callback_data
+    if web_app is not None:
+        kwargs["web_app"] = web_app
+    if emoji_id:
+        kwargs["icon_custom_emoji_id"] = str(emoji_id)
+    return InlineKeyboardButton(**kwargs)
+
 
 def main_menu_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="📁 Каталог", callback_data="cat:home"),
-            InlineKeyboardButton(text="👤 Профиль", callback_data="bot:profile"),
+            make_btn("Каталог", callback_data="cat:home", emoji_id=MENU_EMOJI_IDS.get("catalog")),
+            make_btn("Профиль", callback_data="bot:profile", emoji_id=MENU_EMOJI_IDS.get("profile")),
         ],
         [
-            InlineKeyboardButton(text="💳 Пополнить", callback_data="bot:topup"),
-            InlineKeyboardButton(text="📱 Mini App", web_app=WebAppInfo(url=WEBAPP_ORIGIN)),
+            make_btn("Пополнить", callback_data="bot:topup", emoji_id=MENU_EMOJI_IDS.get("topup")),
+            make_btn("Mini App", web_app=WebAppInfo(url=WEBAPP_ORIGIN)),
         ]
     ])
 
@@ -313,23 +310,25 @@ def _catalog_categories(network: str):
 
 
 def networks_kb():
-    """Сетка соцсетей СТРОГО В ДВА СТОЛБЦА с аккуратными иконками."""
+    """Сетка соцсетей СТРОГО В ДВА СТОЛБЦА с icon_custom_emoji_id."""
     catalog = load_catalog()
     networks = _catalog_networks()
     buttons = []
     row = []
     for index, net in enumerate(networks):
         count = sum(1 for x in catalog.values() if str(x.get("network") or "Прочее") == net)
-        icon = NETWORK_BUTTON_ICONS.get(net, "💎")
-        row.append(InlineKeyboardButton(text=f"{icon} {net} · {count}", callback_data=f"net:{index}"))
+        emoji_id = PREMIUM_EMOJI_IDS.get(net)
+        btn = make_btn(text=f"{net} · {count}", callback_data=f"net:{index}", emoji_id=emoji_id)
+        row.append(btn)
         if len(row) == 2:
             buttons.append(row)
             row = []
     if row:
         buttons.append(row)
+
     buttons.append([
-        InlineKeyboardButton(text="👤 Профиль", callback_data="bot:profile"),
-        InlineKeyboardButton(text="✖️ Закрыть", callback_data="cat:close"),
+        make_btn("Профиль", callback_data="bot:profile", emoji_id=MENU_EMOJI_IDS.get("profile")),
+        make_btn("Закрыть", callback_data="cat:close"),
     ])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -341,8 +340,8 @@ def categories_kb(network: str):
     for index, cat in enumerate(categories):
         count = sum(1 for x in catalog.values()
                     if str(x.get("network") or "Прочее") == network and str(x.get("category") or "Прочее") == cat)
-        buttons.append([InlineKeyboardButton(text=f"📁 {cat} · {count}", callback_data=f"category:{index}")])
-    buttons.append([InlineKeyboardButton(text="🔙 Назад к соцсетям", callback_data="cat:home")])
+        buttons.append([make_btn(f"{cat} · {count}", callback_data=f"category:{index}")])
+    buttons.append([make_btn("Назад к соцсетям", callback_data="cat:home")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -358,19 +357,19 @@ def services_kb(network: str, category: str, page: int = 0):
     for item in items[page * PAGE_SIZE:(page + 1) * PAGE_SIZE]:
         name = str(item.get("name", "Услуга"))
         price = format_unit_price(item.get("rate", 0))
-        buttons.append([InlineKeyboardButton(text=f"✨ {name[:34]} · {price}/шт", callback_data=f"srv:{item['service']}")])
+        buttons.append([make_btn(f"{name[:36]} · {price}/шт", callback_data=f"srv:{item['service']}")])
 
     nav = []
     if page > 0:
-        nav.append(InlineKeyboardButton(text="⬅️ Назад", callback_data=f"page:{page-1}"))
-    nav.append(InlineKeyboardButton(text=f"📄 {page+1}/{pages}", callback_data="cat:noop"))
+        nav.append(make_btn("Назад", callback_data=f"page:{page-1}"))
+    nav.append(make_btn(f"{page+1}/{pages}", callback_data="cat:noop"))
     if page + 1 < pages:
-        nav.append(InlineKeyboardButton(text="Вперёд ➡️", callback_data=f"page:{page+1}"))
+        nav.append(make_btn("Вперёд", callback_data=f"page:{page+1}"))
     if nav:
         buttons.append(nav)
     buttons.append([
-        InlineKeyboardButton(text="📁 Категории", callback_data="cat:back_cats"),
-        InlineKeyboardButton(text="🌐 Соцсети", callback_data="cat:home"),
+        make_btn("Категории", callback_data="cat:back_cats"),
+        make_btn("Соцсети", callback_data="cat:home"),
     ])
     return items, pages, page, InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -426,12 +425,12 @@ async def show_profile(chat_id: int, user: types.User, message_to_edit: types.Me
     )
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="💳 Пополнить баланс", callback_data="bot:topup"),
-            InlineKeyboardButton(text="📁 Каталог услуг", callback_data="cat:home"),
+            make_btn("Пополнить баланс", callback_data="bot:topup", emoji_id=MENU_EMOJI_IDS.get("topup")),
+            make_btn("Каталог услуг", callback_data="cat:home", emoji_id=MENU_EMOJI_IDS.get("catalog")),
         ],
         [
-            InlineKeyboardButton(text="📱 Mini App", web_app=WebAppInfo(url=WEBAPP_ORIGIN)),
-            InlineKeyboardButton(text="🔄 Обновить", callback_data="bot:profile"),
+            make_btn("Mini App", web_app=WebAppInfo(url=WEBAPP_ORIGIN)),
+            make_btn("Обновить", callback_data="bot:profile"),
         ]
     ])
     if message_to_edit:
@@ -555,10 +554,10 @@ async def cb_service_card(callback: types.CallbackQuery, state: FSMContext):
         f"<b>Описание услуги:</b>\n{escape(desc)}"
     )
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🚀 Заказать услугу", callback_data=f"order:{srv_id}")],
+        [make_btn("Заказать услугу", callback_data=f"order:{srv_id}")],
         [
-            InlineKeyboardButton(text="🔙 К списку", callback_data="cat:back_cats"),
-            InlineKeyboardButton(text="🌐 Соцсети", callback_data="cat:home"),
+            make_btn("К списку", callback_data="cat:back_cats"),
+            make_btn("Соцсети", callback_data="cat:home"),
         ]
     ])
     await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
@@ -743,14 +742,14 @@ async def show_order_confirm(message: types.Message, state: FSMContext, item: di
         diff = cost - current_balance
         text += f"\n⚠️ <b>Недостаточно средств!</b> Не хватает <b>{format_money(diff)}</b>."
         kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="💳 Пополнить баланс", callback_data="bot:topup")],
-            [InlineKeyboardButton(text="❌ Отменить заказ", callback_data="botorder:cancel")]
+            [make_btn("Пополнить баланс", callback_data="bot:topup", emoji_id=MENU_EMOJI_IDS.get("topup"))],
+            [make_btn("Отменить заказ", callback_data="botorder:cancel")]
         ])
     else:
         text += "\nВсе верно? Нажмите кнопку для запуска накрутки:"
         kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="✅ Подтвердить и оплатить", callback_data="botorder:confirm")],
-            [InlineKeyboardButton(text="❌ Отменить", callback_data="botorder:cancel")]
+            [make_btn("Подтвердить и оплатить", callback_data="botorder:confirm")],
+            [make_btn("Отменить", callback_data="botorder:cancel")]
         ])
 
     await state.set_state(BotOrder.confirming)
