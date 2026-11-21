@@ -8,293 +8,253 @@
 <style>
 :root{
   color-scheme:dark;
-  --bg:#05070f;
-  --glass:rgba(255,255,255,.055);
-  --glass2:rgba(255,255,255,.02);
-  --line:rgba(255,255,255,.09);
-  --text:#f3f5ff;
-  --muted:#8f9dbf;
+  --bg:#050711;
+  --panel:rgba(18,24,42,0.72);
+  --glass:rgba(255,255,255,0.055);
+  --line:rgba(255,255,255,0.08);
+  --line-active:rgba(142,98,255,0.45);
+  --text:#f4f5ff;
+  --muted:#8e9cb9;
   --accent:#8e62ff;
   --cyan:#3fe0ff;
   --green:#4ff3a6;
-  --red:#ff5e7e;
-  --amber:#ffbe55;
+  --red:#ff5c7a;
 }
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+*{box-sizing:border-box}
 html,body{margin:0;min-height:100%;background:var(--bg)}
 body{
   font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
   color:var(--text);overflow-x:hidden;-webkit-font-smoothing:antialiased;
 }
 
+/* Оптимизированный плавный canvas (DPR=1, легкие спрайты) */
 canvas#bgCanvas{position:fixed;inset:0;width:100%;height:100%;z-index:0;display:block;pointer-events:none}
-.vignette{
-  position:fixed;inset:0;z-index:1;pointer-events:none;
-  background:radial-gradient(ellipse at 50% 0%,transparent 30%,rgba(3,5,12,.55) 100%);
-}
-.grain{
-  position:fixed;inset:0;z-index:2;pointer-events:none;opacity:.035;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
-  mix-blend-mode:overlay;
-}
-.app{position:relative;z-index:3}
+.vignette{position:fixed;inset:0;z-index:1;pointer-events:none;background:radial-gradient(ellipse at 50% 20%,transparent 35%,rgba(3,5,14,.65) 100%)}
+.app{position:relative;z-index:2}
 
-/* HEADER */
+/* Header */
 header{
-  position:sticky;top:0;z-index:40;padding:12px 18px;
-  background:rgba(6,9,19,.6);
-  backdrop-filter:blur(22px) saturate(140%);
-  -webkit-backdrop-filter:blur(22px) saturate(140%);
+  position:sticky;top:0;z-index:40;padding:11px 18px;
+  background:rgba(6,9,19,0.75);
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
   border-bottom:1px solid var(--line);
 }
-.header-row{max-width:1000px;margin:auto;display:flex;align-items:center;justify-content:space-between;gap:10px}
-.logo-btn{
-  border:0;background:none;color:#fff;font-size:22px;font-weight:900;
-  letter-spacing:-.6px;cursor:pointer;padding:0;
-}
+.header-row{max-width:1000px;margin:auto;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.logo-btn{border:0;background:none;color:#fff;font-size:23px;font-weight:900;letter-spacing:-.6px;cursor:pointer;padding:0}
 .logo-btn span{
-  background:linear-gradient(115deg,#a97dff,#3fe0ff,#a97dff);
-  background-size:220% auto;-webkit-background-clip:text;background-clip:text;color:transparent;
-  animation:shimmerText 5s linear infinite;
+  background:linear-gradient(115deg,#a97dff,#3fe0ff,#a97dff);background-size:220% auto;
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  animation:shimmer 5s linear infinite;
 }
-@keyframes shimmerText{to{background-position:220% center}}
-
-.head-right{display:flex;align-items:center;gap:8px}
-.nav-pill{
-  display:inline-flex;align-items:center;gap:6px;padding:6px 12px;
-  border:1px solid var(--line);border-radius:999px;
-  background:linear-gradient(135deg,rgba(255,255,255,.07),rgba(255,255,255,.02));
-  color:var(--text);font-size:12px;font-weight:700;cursor:pointer;
-  transition:border-color .2s, transform .15s;
-}
-.nav-pill:active{transform:scale(.95)}
-.nav-pill:hover{border-color:rgba(142,98,255,.45)}
-.pill-badge{
-  padding:1px 6px;border-radius:999px;background:rgba(142,98,255,.25);
-  color:#d8ccff;font-size:11px;font-weight:800;
-}
+@keyframes shimmer{to{background-position:220% center}}
 
 .balance-pill{
-  display:flex;align-items:center;gap:9px;padding:6px 12px;
-  border:1px solid var(--line);border-radius:999px;
-  background:linear-gradient(135deg,rgba(255,255,255,.07),rgba(255,255,255,.02));
-  box-shadow:0 6px 24px rgba(0,0,0,.35);
+  display:flex;align-items:center;gap:9px;padding:6px 13px;border:1px solid var(--line);border-radius:999px;
+  background:rgba(255,255,255,0.04);box-shadow:0 4px 18px rgba(0,0,0,0.3);
+  transition:border-color .2s;
 }
-.bal-label{color:var(--muted);font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
-.bal-val{font-weight:800;color:var(--green);white-space:nowrap;font-size:14px;text-shadow:0 0 14px rgba(79,243,166,.4)}
+.balance-pill:hover{border-color:var(--line-active)}
+.bal-label{color:var(--muted);font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase}
+.bal-val{font-weight:800;color:var(--green);white-space:nowrap;font-size:14px;text-shadow:0 0 12px rgba(79,243,166,0.3)}
 .plus-btn{
-  width:25px;height:25px;border:0;border-radius:50%;color:#fff;
-  background:linear-gradient(135deg,#8e62ff,#4a2bd6);font-size:17px;font-weight:700;line-height:1;
-  display:grid;place-items:center;cursor:pointer;box-shadow:0 0 16px rgba(142,98,255,.55);
+  width:26px;height:26px;border:0;border-radius:50%;color:#fff;
+  background:linear-gradient(135deg,#8e62ff,#5231db);font-size:17px;font-weight:700;line-height:1;
+  display:grid;place-items:center;cursor:pointer;box-shadow:0 0 14px rgba(142,98,255,0.5);
+  transition:transform .15s,box-shadow .2s;
 }
+.plus-btn:hover{box-shadow:0 0 22px rgba(142,98,255,0.8)}
+.plus-btn:active{transform:scale(.88)}
 
-.wrap{max-width:1000px;margin:auto;padding:18px 16px 70px}
-.hero{padding:10px 0 20px}
+.wrap{max-width:1000px;margin:auto;padding:16px 16px 70px}
+.hero{padding:10px 0 18px}
 .badge-tag{
   display:inline-flex;align-items:center;gap:7px;padding:5px 12px;
-  border:1px solid rgba(169,130,255,.3);border-radius:999px;
-  background:rgba(142,98,255,.09);color:#d3c4ff;
-  font-size:10.5px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;
+  border:1px solid rgba(169,130,255,0.28);border-radius:999px;background:rgba(142,98,255,0.08);
+  color:#d4c6ff;font-size:10.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;
 }
-.badge-dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 9px var(--green)}
+.badge-dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green)}
 .hero h1{
-  font-size:clamp(28px,6vw,44px);line-height:1.07;letter-spacing:-1.2px;
-  margin:12px 0 8px;font-weight:900;
+  font-size:clamp(28px,5.8vw,44px);line-height:1.08;letter-spacing:-1.2px;margin:12px 0 8px;font-weight:900;
 }
 .hero h1 span{
-  background:linear-gradient(105deg,#ffffff,#c2a6ff 40%,#3fe0ff 80%,#ffffff);
-  background-size:250% auto;-webkit-background-clip:text;background-clip:text;color:transparent;
-  animation:shimmerText 7s linear infinite;
+  background:linear-gradient(110deg,#fff,#c3a8ff 45%,#3fe0ff);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
 }
 .hero p{margin:0;color:var(--muted);font-size:14px;max-width:520px}
 
-/* SEARCH & QUICK MATCHES */
-.search-container{position:relative;margin:16px 0 10px}
+/* Поиск */
+.search-container{position:relative;margin:16px 0 20px}
 .search-wrapper{
   position:relative;display:flex;align-items:center;
-  background:rgba(255,255,255,.045);border:1px solid var(--line);border-radius:16px;
-  backdrop-filter:blur(14px);
+  background:rgba(255,255,255,0.045);border:1px solid var(--line);border-radius:16px;
+  transition:border-color .2s,box-shadow .2s;
 }
-.search-wrapper:focus-within{border-color:rgba(142,98,255,.6);box-shadow:0 0 0 4px rgba(142,98,255,.12)}
-.search-icon{padding-left:16px;color:var(--muted);font-size:15px}
+.search-wrapper:focus-within{
+  border-color:rgba(142,98,255,0.6);box-shadow:0 0 0 3px rgba(142,98,255,0.15);
+}
+.search-icon{padding-left:16px;color:var(--muted);font-size:15px;pointer-events:none}
 .search-input{
   flex:1;min-width:0;padding:13px 14px;border:0;background:none;color:var(--text);
   outline:0;font-size:14px;
 }
-.search-clear{border:0;background:none;color:var(--muted);font-size:17px;cursor:pointer;padding:8px 14px;display:none}
+.search-input::placeholder{color:#6c7896}
+.search-clear{
+  border:0;background:none;color:var(--muted);font-size:17px;cursor:pointer;
+  padding:8px 14px;display:none;line-height:1;
+}
 .search-clear.show{display:block}
 
-.quick-results{
-  margin:8px 0 20px;border:1px solid rgba(169,130,255,.25);border-radius:18px;
-  background:rgba(14,20,38,.92);backdrop-filter:blur(20px);overflow:hidden;
-  box-shadow:0 14px 40px rgba(0,0,0,.5);
+/* Заголовок секции результатов */
+.section-title{
+  display:flex;justify-content:space-between;align-items:center;margin:0 0 12px;
+  font-size:14px;font-weight:700;color:var(--muted);
 }
-.qr-head{
-  padding:10px 16px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;
-  color:#c7b8ff;background:rgba(142,98,255,.1);border-bottom:1px solid var(--line);
-  display:flex;justify-content:space-between;
-}
-.qr-item{
-  display:flex;align-items:center;gap:12px;width:100%;padding:12px 16px;
-  border:0;border-bottom:1px solid var(--line);background:transparent;
-  color:var(--text);text-align:left;cursor:pointer;transition:background .15s;
-}
-.qr-item:last-child{border-bottom:0}
-.qr-item:hover{background:rgba(142,98,255,.1)}
-.qr-icon{
-  width:36px;height:36px;flex:0 0 36px;border-radius:12px;display:grid;place-items:center;
-  background:rgba(255,255,255,.06);border:1px solid var(--line);font-size:12px;font-weight:800;color:#d5caff;
-}
-.qr-icon img{width:26px;height:26px;object-fit:contain}
-.qr-info{flex:1;min-width:0}
-.qr-name{display:block;font-size:13.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.qr-net{display:block;font-size:11.5px;color:var(--muted)}
-.qr-price{text-align:right;flex-shrink:0}
-.qr-price strong{display:block;font-size:13.5px;color:#d3c6ff;font-weight:800}
-.qr-price small{display:block;font-size:10px;color:var(--muted)}
+.section-title span{color:var(--accent)}
 
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(255px,1fr));gap:13px}
+/* Карточки */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(255px,1fr));gap:12px}
 .card{
-  position:relative;display:flex;align-items:center;gap:14px;width:100%;
-  min-height:92px;padding:17px;text-align:left;color:var(--text);
-  border:1px solid var(--line);border-radius:20px;
-  background:linear-gradient(135deg,var(--glass),var(--glass2));
-  box-shadow:0 10px 30px rgba(0,0,0,.28);
-  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  position:relative;display:flex;align-items:center;gap:14px;width:100%;min-height:86px;padding:15px 17px;
+  text-align:left;color:var(--text);border:1px solid var(--line);border-radius:18px;
+  background:linear-gradient(135deg,rgba(255,255,255,0.05),rgba(255,255,255,0.015));
+  box-shadow:0 8px 24px rgba(0,0,0,0.22);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
   overflow:hidden;cursor:pointer;
-  transition:transform .22s cubic-bezier(.2,.8,.2,1),border-color .22s,box-shadow .22s;
+  transition:transform .18s ease,border-color .2s,box-shadow .2s;
 }
-.card:hover{transform:translateY(-3px);border-color:rgba(169,130,255,.5);box-shadow:0 18px 44px rgba(108,58,255,.22)}
-.card:active{transform:scale(.98)}
+.card:hover{transform:translateY(-2px);border-color:rgba(169,130,255,0.45);box-shadow:0 12px 30px rgba(108,58,255,0.18)}
+.card:active{transform:scale(.985)}
 .card-icon{
-  display:grid;place-items:center;flex:0 0 48px;width:48px;height:48px;border-radius:15px;
-  background:linear-gradient(135deg,rgba(142,98,255,.28),rgba(63,224,255,.14));
-  border:1px solid rgba(255,255,255,.13);color:#d9ccff;font-weight:900;font-size:14px;
+  display:grid;place-items:center;flex:0 0 46px;width:46px;height:46px;border-radius:14px;
+  background:linear-gradient(135deg,rgba(142,98,255,0.22),rgba(63,224,255,0.12));
+  border:1px solid rgba(255,255,255,0.12);color:#d9ccff;font-weight:900;font-size:14px;
 }
-.card-icon img{width:42px;height:42px;object-fit:contain}
+.card-icon img{width:40px;height:40px;object-fit:contain}
 .card-info{flex:1;min-width:0}
-.card-title{display:block;font-weight:800;font-size:15px;line-height:1.25;overflow-wrap:anywhere}
-.card-sub{display:block;color:var(--muted);font-size:12px;margin-top:4px}
-.card-price-block{text-align:right;flex-shrink:0}
-.card-price{display:block;color:#d3c6ff;font-weight:800;font-size:13.5px}
+.card-title{display:block;font-weight:800;font-size:14.5px;line-height:1.25;overflow-wrap:anywhere}
+.card-sub{display:block;color:var(--muted);font-size:11.5px;margin-top:3px}
+.card-price-block{text-align:right;flex-shrink:0;padding-left:8px}
+.card-price{display:block;color:#d5c8ff;font-weight:800;font-size:13px;white-space:nowrap}
 .card-unit{display:block;color:var(--muted);font-size:10px;margin-top:1px}
-.card-arrow{color:#7f8bab;font-size:21px;transition:transform .28s,color .28s}
-.card:hover .card-arrow{transform:translateX(4px);color:#fff}
+.card-arrow{color:#7683a3;font-size:20px;padding-left:4px;transition:transform .2s}
+.card:hover .card-arrow{transform:translateX(3px);color:#fff}
 
 .back-btn{
-  border:1px solid var(--line);border-radius:14px;padding:10px 15px;
-  background:rgba(255,255,255,.05);color:var(--text);cursor:pointer;
-  margin-bottom:14px;font-weight:700;font-size:13px;
-  display:inline-flex;align-items:center;gap:8px;backdrop-filter:blur(10px);
+  border:1px solid var(--line);border-radius:13px;padding:9px 14px;background:rgba(255,255,255,0.05);
+  color:var(--text);cursor:pointer;margin-bottom:12px;font-weight:700;font-size:13px;
+  display:inline-flex;align-items:center;gap:7px;transition:border-color .2s;
 }
+.back-btn:hover{border-color:var(--accent)}
+.empty-state{padding:34px 20px;color:var(--muted);text-align:center;font-size:14px}
+.footer-text{margin-top:38px;color:#596480;font-size:11.5px;text-align:center}
 
-.footer-box{
-  margin-top:42px;display:flex;flex-direction:column;align-items:center;gap:12px;
-  color:#5f6b88;font-size:11.5px;text-align:center;
-}
-
-/* OVERLAYS & MODALS */
+/* Модалки */
 .overlay{
   position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;padding:16px;
-  background:rgba(2,4,12,.78);
-  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  background:rgba(2,4,12,0.8);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
 }
 .sheet{
-  width:100%;max-width:540px;max-height:90dvh;overflow:auto;padding:24px;
-  border:1px solid rgba(255,255,255,.13);border-radius:26px;
-  background:linear-gradient(155deg,#151d36 0%,#0a1020 100%);
-  box-shadow:0 34px 110px rgba(0,0,0,.85),0 0 70px rgba(142,98,255,.14);
+  width:100%;max-width:520px;max-height:90dvh;overflow:auto;padding:22px;
+  border:1px solid rgba(255,255,255,0.12);border-radius:24px;
+  background:linear-gradient(155deg,#151d34 0%,#090e1d 100%);
+  box-shadow:0 30px 90px rgba(0,0,0,0.85);
 }
-.sheet-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px}
-.sheet-head h2{margin:0;font-size:20px;font-weight:900;letter-spacing:-.4px}
+.sheet-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px}
+.sheet-head h2{margin:0;font-size:19px;font-weight:900}
 .close-btn{
   width:32px;height:32px;flex:0 0 32px;border-radius:50%;border:1px solid var(--line);
-  background:rgba(255,255,255,.05);color:var(--muted);font-size:15px;
+  background:rgba(255,255,255,0.05);color:var(--muted);font-size:15px;
   display:grid;place-items:center;cursor:pointer;
 }
+.close-btn:hover{color:#fff;border-color:rgba(255,255,255,0.3)}
 .sheet-desc{
-  max-height:128px;overflow:auto;white-space:pre-wrap;margin:12px 0;padding:12px 14px;
-  border-radius:14px;border:1px solid rgba(255,255,255,.06);
-  background:rgba(0,0,0,.35);color:var(--muted);font-size:12.5px;line-height:1.45;
+  max-height:120px;overflow:auto;white-space:pre-wrap;margin:12px 0;padding:11px 13px;
+  border-radius:13px;border:1px solid rgba(255,255,255,0.05);
+  background:rgba(0,0,0,0.35);color:var(--muted);font-size:12.5px;line-height:1.45;
 }
 .sheet-meta{color:var(--muted);font-size:12px;margin-top:3px}
-label{display:block;margin:14px 0 6px;font-size:12.5px;color:#ccd3e6;font-weight:700}
+label{display:block;margin:13px 0 6px;font-size:12.5px;color:#ccd3e6;font-weight:700}
 .field{
-  width:100%;padding:13px 16px;border:1px solid var(--line);border-radius:14px;
-  background:rgba(0,0,0,.32);color:var(--text);outline:0;font-size:14px;
+  width:100%;padding:12px 15px;border:1px solid var(--line);border-radius:13px;
+  background:rgba(0,0,0,0.32);color:var(--text);outline:0;font-size:14px;
+  transition:border-color .2s;
 }
-.field:focus{border-color:rgba(142,98,255,.65)}
+.field:focus{border-color:rgba(142,98,255,0.7)}
 
-.price-summary{
-  margin:18px 0;padding:15px 18px;border-radius:16px;
-  border:1px solid rgba(255,255,255,.1);
-  background:linear-gradient(115deg,rgba(142,98,255,.26),rgba(63,224,255,.14));
-  display:flex;flex-direction:column;gap:6px;
+.price-calc-box{
+  margin:16px 0;padding:14px 16px;border-radius:15px;border:1px solid rgba(255,255,255,0.08);
+  background:linear-gradient(115deg,rgba(142,98,255,0.18),rgba(63,224,255,0.08));
 }
-.price-row{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#c5cde3}
-.price-row.main{font-size:16px;font-weight:800;color:#fff;padding-top:8px;border-top:1px solid rgba(255,255,255,.1)}
-.price-val{color:#3fe0ff;font-size:18px;font-weight:900}
+.calc-row{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:var(--muted);margin-bottom:6px}
+.calc-row.total-row{margin:8px 0 0;padding-top:8px;border-top:1px solid rgba(255,255,255,0.08);font-size:14.5px;font-weight:800;color:var(--text)}
+.calc-val{color:#5ce6ff;font-size:17px;font-weight:900}
 
-.glow-btn{
-  position:relative;width:100%;padding:14px;border:0;border-radius:16px;overflow:hidden;
-  background:linear-gradient(110deg,#7d4cff,#a95cff 30%,#3fe0ff 65%,#7d4cff 100%);
-  background-size:300% auto;color:#fff;font-weight:800;font-size:15px;cursor:pointer;
-  box-shadow:0 10px 32px rgba(142,98,255,.42);
-}
-.glow-btn:disabled{opacity:.62;cursor:not-allowed}
-
+/* Блок ошибки внутри модалки */
 .err-box{
-  margin-top:12px;padding:12px 14px;border-radius:14px;
-  background:rgba(255,94,126,.12);border:1px solid rgba(255,94,126,.35);
-  color:#ffd2dc;font-size:13px;line-height:1.45;
+  display:none;margin-top:12px;padding:12px 14px;border-radius:14px;
+  background:rgba(255,92,122,0.12);border:1px solid rgba(255,92,122,0.35);
+  color:#ffd2dc;font-size:13px;line-height:1.4;
 }
-.err-code{display:inline-block;margin-top:6px;padding:2px 8px;border-radius:6px;background:rgba(0,0,0,.35);color:#ff9aa8;font-family:monospace;font-size:11px}
-.secondary-btn{
-  width:100%;margin-top:10px;padding:11px;border:1px solid rgba(79,243,166,.4);
-  border-radius:13px;background:rgba(79,243,166,.12);color:var(--green);
-  font-weight:700;font-size:13px;cursor:pointer;
+.err-box.show{display:block}
+.err-box strong{display:block;color:#ff839a;margin-bottom:3px}
+.err-code{
+  display:inline-block;margin-top:5px;padding:2px 8px;border-radius:6px;
+  background:rgba(0,0,0,0.35);color:#fff;font-family:monospace;font-size:11.5px;
 }
+.err-btn-wrap{margin-top:10px}
 
-/* CHAT MODAL INTERFACE */
-.support-options{display:flex;flex-direction:column;gap:12px;margin-top:10px}
-.chat-tg-btn{
-  display:flex;align-items:center;justify-content:center;gap:8px;
-  width:100%;padding:14px;border-radius:16px;border:0;
-  background:linear-gradient(135deg,#2AABEE,#229ED9);color:#fff;
-  font-weight:800;font-size:14px;cursor:pointer;box-shadow:0 6px 20px rgba(34,158,217,0.35);
+/* Кнопка заказа */
+.glow-btn{
+  position:relative;width:100%;padding:13px;border:0;border-radius:15px;overflow:hidden;
+  background:linear-gradient(110deg,#7c4fff,#a45aff 35%,#3fe0ff 70%,#7c4fff 100%);
+  background-size:300% auto;color:#fff;font-weight:800;font-size:15px;cursor:pointer;
+  box-shadow:0 8px 26px rgba(142,98,255,0.38);
+  transition:transform .15s,box-shadow .2s;
+  animation:btnFlow 6s linear infinite;
 }
-
+@keyframes btnFlow{to{background-position:300% center}}
+.glow-btn:hover{transform:translateY(-1px);box-shadow:0 12px 32px rgba(142,98,255,0.55)}
+.glow-btn:active{transform:scale(.98)}
+.glow-btn:disabled{opacity:.62;cursor:not-allowed;transform:none}
 .spin-wrap{display:inline-flex;align-items:center;gap:8px}
-.spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .65s linear infinite}
+.spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin .65s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 
+/* Toast */
 #toast{
   position:fixed;left:50%;bottom:24px;z-index:200;transform:translateX(-50%);
   max-width:92vw;padding:12px 18px;font-size:13px;font-weight:600;white-space:pre-wrap;
-  border:1px solid rgba(169,130,255,.45);border-radius:16px;
-  background:rgba(20,15,40,.95);backdrop-filter:blur(16px);color:#fff;
-  box-shadow:0 16px 44px rgba(0,0,0,.7);
+  border:1px solid rgba(169,130,255,0.4);border-radius:14px;
+  background:rgba(18,14,34,0.96);backdrop-filter:blur(14px);color:#fff;
+  box-shadow:0 12px 35px rgba(0,0,0,0.6);
 }
 
-.splash{position:fixed;inset:0;z-index:300;display:grid;place-items:center;background:#05070f;transition:opacity .45s ease,visibility .45s ease}
+/* Splash */
+.splash{position:fixed;inset:0;z-index:300;display:grid;place-items:center;background:#050711;transition:opacity .35s,visibility .35s}
 .splash.hide{opacity:0;visibility:hidden;pointer-events:none}
 .splash-inner{text-align:center}
-.splash-title{font-size:32px;font-weight:900;letter-spacing:-1px}
+.splash-title{font-size:30px;font-weight:900;letter-spacing:-.8px}
 .splash-title span{background:linear-gradient(115deg,#a97dff,#3fe0ff);-webkit-background-clip:text;background-clip:text;color:transparent}
 .splash-ring{
-  width:46px;height:46px;margin:20px auto 14px;border-radius:50%;
-  border:3px solid rgba(255,255,255,.08);border-top-color:#8e62ff;border-right-color:#3fe0ff;
-  animation:spin .85s linear infinite;
+  width:42px;height:42px;margin:18px auto 12px;border-radius:50%;
+  border:3px solid rgba(255,255,255,0.08);border-top-color:#8e62ff;border-right-color:#3fe0ff;
+  animation:spin .8s linear infinite;
 }
-.empty-txt{color:var(--muted);text-align:center;padding:20px 0;font-size:13.5px}
+.splash-text{color:var(--muted);font-size:12px}
+
 [hidden]{display:none!important}
+@media(max-width:600px){
+  .wrap{padding:14px 14px 60px}
+  .hero h1{font-size:30px}
+  .bal-label{display:none}
+  .sheet{padding:18px;border-radius:20px}
+}
 </style>
 </head>
 <body>
 
 <canvas id="bgCanvas"></canvas>
 <div class="vignette"></div>
-<div class="grain"></div>
 
 <div class="splash" id="splash">
   <div class="splash-inner">
@@ -308,15 +268,10 @@ label{display:block;margin:14px 0 6px;font-size:12.5px;color:#ccd3e6;font-weight
   <header>
     <div class="header-row">
       <button class="logo-btn" id="home">Vibe<span>Boost</span></button>
-      <div class="head-right">
-        <button class="nav-pill" id="openOrdersBtn" type="button">
-          Заказы <span class="pill-badge" id="ordersBadge">0</span>
-        </button>
-        <div class="balance-pill">
-          <span class="bal-label">Баланс</span>
-          <span class="bal-val" id="balance">… ₽</span>
-          <button class="plus-btn" id="openTopup" aria-label="Пополнить">+</button>
-        </div>
+      <div class="balance-pill">
+        <span class="bal-label">Баланс</span>
+        <span class="bal-val" id="balance">… ₽</span>
+        <button class="plus-btn" id="openTopup" aria-label="Пополнить">+</button>
       </div>
     </div>
   </header>
@@ -328,6 +283,7 @@ label{display:block;margin:14px 0 6px;font-size:12.5px;color:#ccd3e6;font-weight
       <p>Услуги для быстрого и безопасного роста твоих социальных сетей.</p>
     </section>
 
+    <!-- Поиск со сбросом -->
     <div class="search-container">
       <div class="search-wrapper">
         <span class="search-icon">🔍</span>
@@ -336,39 +292,86 @@ label{display:block;margin:14px 0 6px;font-size:12.5px;color:#ccd3e6;font-weight
       </div>
     </div>
 
-    <div class="quick-results" id="quickResults" hidden></div>
-
     <button class="back-btn" id="back" hidden>← Назад</button>
 
-    <div class="grid" id="grid"></div>
-    <div class="footer-box">
-      <span>Оплата моментально списывается с баланса профиля</span>
-      <button class="nav-pill" id="footerChatBtn" type="button">💬 Написать в поддержку</button>
+    <div class="section-title" id="sectionTitle">
+      <span id="sectionTitleText">Категории</span>
+      <small id="counter"></small>
     </div>
+
+    <div class="grid" id="grid"></div>
+    <div class="footer-text">Оплата моментально списывается с баланса профиля</div>
   </main>
 
-  <!-- МОДАЛКА ПОДДЕРЖКИ -->
-  <div class="overlay" id="chatOverlay" hidden>
+  <!-- Модалка заказа -->
+  <div class="overlay" id="orderOverlay" hidden>
     <section class="sheet">
       <div class="sheet-head">
-        <h2>Связаться с поддержкой</h2>
-        <button class="close-btn" id="closeChat">✕</button>
+        <h2>Оформление заказа</h2>
+        <button class="close-btn" id="closeOrder">✕</button>
       </div>
+      <strong id="serviceName" style="font-size:15px"></strong>
+      <div class="sheet-meta" id="serviceMeta"></div>
+      <div class="sheet-desc" id="description"></div>
 
-      <p class="sheet-meta" style="margin-top:0">Напишите ваш вопрос или опишите возникшую проблему. К сообщению будет прикреплён ваш <span id="userTagBadge" style="color:#d8ccff;font-weight:700"></span>.</p>
+      <form id="orderForm">
+        <label for="link">Ссылка на страницу / канал / @username</label>
+        <input class="field" id="link" required maxlength="700" placeholder="https://… или @username">
 
-      <div class="support-options">
-        <textarea class="field" id="supportMessageText" style="min-height:110px" placeholder="Опишите ваш вопрос или номер заказа…"></textarea>
-        
-        <button class="glow-btn" id="sendSupportMsgBtn" type="button"><span>Отправить сообщение</span></button>
+        <label for="quantity">Количество <span class="sheet-meta" id="limits"></span></label>
+        <input class="field" id="quantity" type="number" step="1" required>
 
-        <div style="text-align:center;color:var(--muted);font-size:12px;margin:4px 0">или</div>
+        <div class="price-calc-box">
+          <div class="calc-row">
+            <span>Цена за 1 шт.:</span>
+            <strong id="unitPriceLabel">—</strong>
+          </div>
+          <div class="calc-row total-row">
+            <span>Итого к списанию:</span>
+            <span class="calc-val" id="total">—</span>
+          </div>
+        </div>
 
-        <button class="chat-tg-btn" id="openDirectTgBtn" type="button">
-          ✈️ Написать администратору в Telegram
-        </button>
+        <button class="glow-btn" id="submit" type="submit"><span>Подтвердить заказ</span></button>
+
+        <!-- Блок понятной ошибки для пользователя -->
+        <div class="err-box" id="orderErrBox">
+          <strong id="errTitle">Ошибка</strong>
+          <span id="errDesc"></span>
+          <div id="errCodeBadge"></div>
+          <div class="err-btn-wrap" id="errTopupBtnWrap" hidden>
+            <button type="button" class="back-btn" id="errTopupBtn" style="margin-top:8px;width:100%;justify-content:center">Пополнить баланс +</button>
+          </div>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <!-- Модалка пополнения -->
+  <div class="overlay" id="topupOverlay" hidden>
+    <section class="sheet">
+      <div class="sheet-head">
+        <h2>Пополнение баланса</h2>
+        <button class="close-btn" id="closeTopup">✕</button>
       </div>
-      <div id="supportStatusArea"></div>
+      <p class="sheet-meta" style="margin-top:0">Укажите сумму перевода. Администратор проверит и зачислит средства.</p>
+
+      <label for="topupAmount">Сумма, ₽</label>
+      <input class="field" id="topupAmount" type="number" min="10" max="100000" value="100">
+
+      <label for="topupMethod">Способ оплаты</label>
+      <select class="field" id="topupMethod">
+        <option value="sbp">СБП / Банковская карта РФ</option>
+        <option value="crypto">Криптовалюта (USDT / TON / BTC)</option>
+        <option value="other">Другой способ</option>
+      </select>
+
+      <button class="glow-btn" id="createTopup" style="margin-top:18px"><span>Создать запрос</span></button>
+
+      <div class="err-box" id="topupErrBox">
+        <strong id="topupErrTitle"></strong>
+        <span id="topupErrDesc"></span>
+      </div>
     </section>
   </div>
 
@@ -377,78 +380,601 @@ label{display:block;margin:14px 0 6px;font-size:12.5px;color:#ccd3e6;font-weight
 
 <script>
 'use strict';
+
+/* ============================================================
+   ОПТИМИЗИРОВАННЫЙ ЛЁГКИЙ ФОН НА CANVAS (БЕЗ ЛАГОВ)
+   DPR фиксирован на 1.0 (чтобы не грузить мобильный GPU),
+   3 мягких градиентных пятна + легкие частицы.
+   ============================================================ */
+(function bg(){
+  const canvas = document.getElementById('bgCanvas');
+  const ctx = canvas.getContext('2d', { alpha: false });
+  let W = 0, H = 0, raf = null, last = 0, t = 0, paused = false;
+
+  function makeSprite(r, g, b, size){
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    const gx = c.getContext('2d');
+    const grad = gx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
+    grad.addColorStop(0, 'rgba(' + r + ',' + g + ',' + b + ',0.48)');
+    grad.addColorStop(0.4, 'rgba(' + r + ',' + g + ',' + b + ',0.2)');
+    grad.addColorStop(0.8, 'rgba(' + r + ',' + g + ',' + b + ',0.04)');
+    grad.addColorStop(1, 'rgba(' + r + ',' + g + ',' + b + ',0)');
+    gx.fillStyle = grad;
+    gx.fillRect(0, 0, size, size);
+    return c;
+  }
+
+  const blobs = [
+    { sprite: makeSprite(142, 98, 255, 200), bx: 0.2, by: 0.2, ax: 0.15, ay: 0.12, sx: 0.05, sy: 0.04, ph: 0, r: 0.55 },
+    { sprite: makeSprite(63, 224, 255, 200), bx: 0.8, by: 0.3, ax: 0.14, ay: 0.15, sx: 0.04, sy: 0.05, ph: 2.1, r: 0.48 },
+    { sprite: makeSprite(255, 75, 216, 200), bx: 0.4, by: 0.75, ax: 0.16, ay: 0.14, sx: 0.045, sy: 0.038, ph: 4.2, r: 0.45 }
+  ];
+
+  let particles = [];
+
+  function resize(){
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = W;
+    canvas.height = H;
+    const count = Math.min(22, Math.floor(W / 24));
+    particles = Array.from({ length: count }, () => ({
+      x: Math.random() * W,
+      y: Math.random() * H,
+      r: Math.random() * 1.5 + 0.6,
+      v: Math.random() * 7 + 4,
+      drift: Math.random() * 0.5 + 0.2,
+      a: Math.random() * 0.35 + 0.15,
+      ph: Math.random() * 6.28
+    }));
+  }
+
+  function frame(now){
+    if (!last) last = now;
+    let dt = (now - last) / 1000;
+    last = now;
+    if (dt > 0.05) dt = 0.05;
+    t += dt;
+
+    ctx.fillStyle = '#050711';
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.globalCompositeOperation = 'lighter';
+    const minS = Math.min(W, H);
+
+    for (let i = 0; i < blobs.length; i++){
+      const b = blobs[i];
+      const x = (b.bx + Math.sin(t * b.sx + b.ph) * b.ax) * W;
+      const y = (b.by + Math.cos(t * b.sy + b.ph * 0.7) * b.ay) * H;
+      const r = b.r * minS * (1 + Math.sin(t * 0.1 + b.ph) * 0.1);
+      ctx.drawImage(b.sprite, x - r, y - r, r * 2, r * 2);
+    }
+
+    ctx.fillStyle = '#dfd8ff';
+    for (let i = 0; i < particles.length; i++){
+      const p = particles[i];
+      p.y -= p.v * dt;
+      p.x += Math.sin(t * p.drift + p.ph) * 0.3;
+      if (p.y < -10){ p.y = H + 10; p.x = Math.random() * W; }
+      ctx.globalAlpha = p.a;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, 6.28);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+
+    if (!paused) raf = requestAnimationFrame(frame);
+  }
+
+  window.addEventListener('resize', () => { resize(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden){ paused = true; if (raf) cancelAnimationFrame(raf); }
+    else { paused = false; last = 0; raf = requestAnimationFrame(frame); }
+  });
+
+  resize();
+  raf = requestAnimationFrame(frame);
+})();
+
+/* ============================================================
+   ПРИЛОЖЕНИЕ: ЦЕНА ЗА 1 ШТ, ГЛОБАЛЬНЫЙ ПОИСК, КОДЫ ОШИБОК
+   ============================================================ */
 const API = 'https://vibeboost-2.onrender.com';
-const ADMIN_TG_USERNAME = 'vibeboost_admin'; // Укажи ваш username админа
+const ICONS = {
+  'Telegram':'telegram.svg','ВКонтакте':'vk.svg','Instagram':'instagram.svg',
+  'TikTok':'tiktok.svg','YouTube':'youtube.svg','Twitter X':'twitter.png',
+  'Одноклассники':'ok.svg','RuTube':'rutube.png','Twitch':'twitch.svg',
+  'Kick':'kick.png','MAX':'max.png','Wibes':'wibes.png'
+};
 
 const $ = id => document.getElementById(id);
 const tg = window.Telegram?.WebApp;
+let services = [], network = null, category = null, selected = null, balance = 0, busy = false, toastTimer;
 
-function getUserId(){
-  if (tg?.initDataUnsafe?.user?.id) return String(tg.initDataUnsafe.user.id);
-  return 'guest';
+// Форматирование цен: ВСЕГДА ЗА 1 ШТУКУ
+function formatUnitPrice(ratePer1000){
+  const unit = Number(ratePer1000) / 1000;
+  if (!isFinite(unit) || unit <= 0) return '— ₽';
+  if (unit >= 10){
+    return unit.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₽';
+  } else if (unit >= 1){
+    return unit.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 3 }) + ' ₽';
+  } else if (unit >= 0.01){
+    return unit.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 3 }) + ' ₽';
+  } else {
+    // микро-цены (например, 0.005)
+    return unit.toLocaleString('ru-RU', { minimumFractionDigits: 3, maximumFractionDigits: 4 }) + ' ₽';
+  }
 }
-function getUserHashtag(){
-  const uid = getUserId();
-  return uid !== 'guest' ? `#id${uid}` : '#id_unknown';
-}
+
+// Форматирование общей суммы заказа
+const formatMoney = n => Number(n).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₽';
 
 function toast(msg){
   const t = $('toast');
   t.textContent = msg;
   t.hidden = false;
-  setTimeout(() => { t.hidden = true; }, 4000);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.hidden = true; }, 4500);
 }
 
-$('footerChatBtn').onclick = () => {
-  $('userTagBadge').textContent = getUserHashtag();
-  $('chatOverlay').hidden = false;
-};
-$('closeChat').onclick = () => { $('chatOverlay').hidden = true; };
+function el(tag, text, cls){
+  const e = document.createElement(tag);
+  if (text !== undefined) e.textContent = text;
+  if (cls) e.className = cls;
+  return e;
+}
 
-$('sendSupportMsgBtn').onclick = async () => {
-  const text = $('supportMessageText').value.trim();
-  if (!text){
-    toast('Введите текст сообщения');
+function hideSplash(){
+  const s = $('splash');
+  if (s && !s.classList.contains('hide')) s.classList.add('hide');
+}
+setTimeout(hideSplash, 1400);
+
+function auth(){
+  if (tg?.initData && tg.initData.length > 0) return tg.initData;
+  if (location.hash && location.hash.length > 1){
+    const p = new URLSearchParams(location.hash.slice(1));
+    const h = p.get('tgWebAppData');
+    if (h) return h;
+  }
+  return '';
+}
+
+/* ============================================================
+   ОБРАБОТЧИК ОШИБОК С ВНУТРЕННИМИ КОДАМИ ДЛЯ АДМИНА
+   ============================================================ */
+function classifyError(err){
+  const text = (err && (err.message || String(err))) || '';
+  const lower = text.toLowerCase();
+
+  // 1. Недостаточно баланса
+  if (lower.includes('недостаточно средств') || lower.includes('insufficient') || lower.includes('402')){
+    return {
+      type: 'balance',
+      title: 'Недостаточно средств на балансе',
+      desc: 'Для совершения этой покупки не хватает средств. Пожалуйста, пополните баланс.',
+      code: null
+    };
+  }
+
+  // 2. Ошибка авторизации Telegram (initData)
+  if (lower.includes('initdata') || lower.includes('подпись') || lower.includes('auth_date') || lower.includes('403')){
+    return {
+      type: 'auth',
+      title: 'Ошибка авторизации сессии',
+      desc: 'Пожалуйста, закройте и снова откройте приложение через кнопку бота в Telegram.',
+      code: 'ERR-AUTH-403'
+    };
+  }
+
+  // 3. Google Таблица (Sheets / Secret / Lock)
+  if (lower.includes('sheets') || lower.includes('гугл таблица') || lower.includes('таблиц') || lower.includes('unauthorized') || lower.includes('sheet')){
+    return {
+      type: 'sheets',
+      title: 'Сервис данных временно недоступен',
+      desc: 'Произошла техническая ошибка базы данных. Передайте код администратору для устранения:',
+      code: 'ERR-GS-502'
+    };
+  }
+
+  // 4. Поставщик услуг (Twiboost)
+  if (lower.includes('поставщик') || lower.includes('twiboost') || lower.includes('provider') || lower.includes('отклонил')){
+    return {
+      type: 'provider',
+      title: 'Услуга временно недоступна у поставщика',
+      desc: 'Поставщик не смог принять заказ. Деньги возвращены на баланс. Сообщите код поддержке:',
+      code: 'ERR-PRV-503'
+    };
+  }
+
+  // 5. Некорректные параметры (ссылка, лимит)
+  if (lower.includes('количество') || lower.includes('ссылк') || lower.includes('каталог') || lower.includes('404')){
+    return {
+      type: 'validation',
+      title: 'Неверные данные заказа',
+      desc: text.replace(/Google Таблица.*?:/gi, '').trim(),
+      code: 'ERR-VAL-400'
+    };
+  }
+
+  // 6. Сеть / таймаут
+  if (lower.includes('failed to fetch') || lower.includes('network') || lower.includes('abort') || lower.includes('таймаут')){
+    return {
+      type: 'network',
+      title: 'Сбой интернет-соединения',
+      desc: 'Не удалось связаться с сервером. Проверьте интернет и повторите попытку.',
+      code: 'ERR-NET-504'
+    };
+  }
+
+  // 7. Общая серверная ошибка
+  return {
+    type: 'server',
+    title: 'Внутренняя ошибка сервиса',
+    desc: 'Произошел непредвиденный сбой. Сообщите этот код администратору:',
+    code: 'ERR-SRV-500'
+  };
+}
+
+async function api(path, payload){
+  const r = await fetch(API + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  const text = await r.text();
+  let d;
+  try { d = JSON.parse(text); }
+  catch { throw Error('Сервер вернул некорректный ответ (код 500)'); }
+  if (!r.ok || !d.ok) throw Error(d.error || ('HTTP ' + r.status));
+  return d;
+}
+
+async function refreshBalance(){
+  const cached = localStorage.getItem('vb_bal');
+  if (cached !== null) $('balance').textContent = formatMoney(Number(cached));
+
+  const a = auth();
+  if (!a){
+    if (cached === null) $('balance').textContent = '0,00 ₽';
     return;
   }
 
-  const btn = $('sendSupportMsgBtn');
+  try {
+    const d = await api('/api/user/info', { initData: a });
+    balance = Number(d.balance || 0);
+    $('balance').textContent = formatMoney(balance);
+    localStorage.setItem('vb_bal', String(balance));
+  } catch (e){
+    if (cached === null) $('balance').textContent = '0,00 ₽';
+    console.error('Баланс:', e);
+  }
+}
+
+// Создание карточки услуги (цена везде ЗА 1 ШТУКУ)
+function createCard(title, sub, cb, net, unitPriceText, isSearchMatch){
+  const b = el('button', undefined, 'card');
+  b.type = 'button';
+
+  if (net){
+    const i = el('span', net.slice(0, 2).toUpperCase(), 'card-icon');
+    const f = ICONS[net];
+    if (f){
+      const im = new Image();
+      im.alt = '';
+      im.onload = () => i.replaceChildren(im);
+      im.src = './' + f;
+    }
+    b.append(i);
+  }
+
+  const info = el('span', undefined, 'card-info');
+  info.append(el('span', title, 'card-title'));
+  if (sub) info.append(el('span', sub, 'card-sub'));
+  b.append(info);
+
+  if (unitPriceText){
+    const pb = el('span', undefined, 'card-price-block');
+    pb.append(el('span', unitPriceText, 'card-price'));
+    pb.append(el('span', 'за 1 шт.', 'card-unit'));
+    b.append(pb);
+  }
+
+  b.append(el('span', '›', 'card-arrow'));
+  b.onclick = cb;
+  return b;
+}
+
+/* ============================================================
+   УМНЫЙ ПОИСК ПО ВСЕМУ СПИСКУ УСЛУГ (БЕЗ ОГРАНИЧЕНИЙ ЭКРАНА)
+   ============================================================ */
+function searchServices(query){
+  const q = query.trim().toLowerCase();
+  const words = q.split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+
+  return services.filter(s => {
+    const hay = ((s.name || '') + ' ' + (s.network || '') + ' ' + (s.category || '') + ' ' + (s.service || '')).toLowerCase();
+    // Все слова из запроса должны присутствовать
+    return words.every(w => hay.includes(w));
+  });
+}
+
+function render(){
+  const query = $('search').value.trim();
+  const g = $('grid');
+  const clearBtn = $('searchClear');
+  g.replaceChildren();
+
+  clearBtn.classList.toggle('show', query.length > 0);
+
+  // ЕСЛИ В ПОИСКЕ ЧТО-ТО ВВЕДЕНО — ИЩЕМ ПО ВСЕМУ СПИСКУ УСЛУГ
+  if (query.length > 0){
+    $('back').hidden = true;
+    $('sectionTitleText').textContent = 'Найдено по запросу «' + query + '»';
+
+    const results = searchServices(query);
+    $('counter').textContent = results.length + ' шт.';
+
+    if (!results.length){
+      g.append(el('p', 'По вашему запросу ничего не найдено. Попробуйте другое слово (например: лайки, тг, просмотры).', 'empty-state'));
+      return;
+    }
+
+    for (let i = 0; i < results.length; i++){
+      const s = results[i];
+      const sub = s.network + ' · ' + s.category + ' · ID ' + s.service;
+      const unitP = formatUnitPrice(s.rate);
+      g.append(createCard(s.name, sub, () => openOrder(s), s.network, unitP, true));
+    }
+    return;
+  }
+
+  // СТАНДАРТНАЯ НАВИГАЦИЯ (КОГДА ПОИСК ПУСТ)
+  $('back').hidden = !network;
+
+  if (!network){
+    $('sectionTitleText').textContent = 'Выберите соцсеть';
+    const nets = [...new Set(services.map(s => s.network))].sort((a, b) => a.localeCompare(b, 'ru'));
+    $('counter').textContent = nets.length + ' площадок';
+
+    for (let i = 0; i < nets.length; i++){
+      const n = nets[i];
+      const count = services.filter(s => s.network === n).length;
+      g.append(createCard(n, 'Доступно услуг: ' + count, () => {
+        network = n; category = null; render();
+      }, n, null, false));
+    }
+  } else if (!category){
+    $('sectionTitleText').textContent = network + ' — категории';
+    const filtered = services.filter(s => s.network === network);
+    const cats = [...new Set(filtered.map(s => s.category))].sort((a, b) => a.localeCompare(b, 'ru'));
+    $('counter').textContent = cats.length + ' категорий';
+
+    for (let i = 0; i < cats.length; i++){
+      const c = cats[i];
+      const count = filtered.filter(s => s.category === c).length;
+      g.append(createCard(c, 'Услуг: ' + count, () => {
+        category = c; render();
+      }, null, null, false));
+    }
+  } else {
+    $('sectionTitleText').textContent = category;
+    const list = services.filter(s => s.network === network && s.category === category);
+    $('counter').textContent = list.length + ' услуг';
+
+    for (let i = 0; i < list.length; i++){
+      const s = list[i];
+      const unitP = formatUnitPrice(s.rate);
+      g.append(createCard(
+        s.name,
+        'ID ' + s.service + ' · от ' + s.min + ' до ' + s.max + ' шт.',
+        () => openOrder(s),
+        null,
+        unitP,
+        false
+      ));
+    }
+  }
+
+  if (!g.children.length) g.append(el('p', 'Услуги не найдены', 'empty-state'));
+}
+
+function openOrder(s){
+  selected = s;
+  $('serviceName').textContent = s.name;
+  $('serviceMeta').textContent = s.network + ' · ' + s.category + ' · ID ' + s.service;
+  $('description').textContent = s.description || 'Описание услуги отсутствует.';
+  $('link').value = '';
+  $('quantity').min = s.min;
+  $('quantity').max = s.max;
+  $('quantity').value = s.min;
+  $('limits').textContent = '(от ' + s.min + ' до ' + s.max + ')';
+
+  // Показываем цену за 1 шт. прямо в модалке
+  $('unitPriceLabel').textContent = formatUnitPrice(s.rate);
+
+  // Скрываем блок ошибок
+  hideOrderError();
+
+  const btn = $('submit');
+  btn.disabled = false;
+  btn.innerHTML = '<span>Подтвердить заказ</span>';
+
+  updatePrice();
+  $('orderOverlay').hidden = false;
+}
+
+function updatePrice(){
+  if (!selected) return;
+  const raw = $('quantity').value;
+  const q = Number(raw);
+  const valid = /^\d+$/.test(raw) && Number.isSafeInteger(q) && q >= Number(selected.min) && q <= Number(selected.max);
+  $('quantity').setCustomValidity(valid ? '' : ('Введите число от ' + selected.min + ' до ' + selected.max));
+  $('total').textContent = valid ? formatMoney(Number(selected.rate) * q / 1000) : '—';
+}
+
+function showOrderError(err){
+  const box = $('orderErrBox');
+  const info = classifyError(err);
+
+  $('errTitle').textContent = info.title;
+  $('errDesc').textContent = info.desc;
+
+  const badge = $('errCodeBadge');
+  if (info.code){
+    badge.innerHTML = '<span class="err-code">' + info.code + '</span>';
+  } else {
+    badge.innerHTML = '';
+  }
+
+  // Если не хватает баланса — предлагаем кнопку мгновенного пополнения
+  const topupWrap = $('errTopupBtnWrap');
+  topupWrap.hidden = (info.type !== 'balance');
+
+  box.classList.add('show');
+}
+
+function hideOrderError(){
+  $('orderErrBox').classList.remove('show');
+}
+
+// Нажатие "Пополнить баланс" прямо из ошибки
+$('errTopupBtn').onclick = () => {
+  $('orderOverlay').hidden = true;
+  $('topupOverlay').hidden = false;
+};
+
+// Отправка формы заказа с защитой от повторного клика
+$('orderForm').onsubmit = async e => {
+  e.preventDefault();
+  if (busy || !selected) return;
+  updatePrice();
+  if (!e.currentTarget.reportValidity()) return;
+
+  const a = auth();
+  if (!a){
+    showOrderError(new Error('initData отсутствует. Откройте через Telegram.'));
+    return;
+  }
+
+  busy = true;
+  hideOrderError();
+
+  const btn = $('submit');
   btn.disabled = true;
-  btn.innerHTML = '<span class="spin-wrap"><i class="spinner"></i>Отправка…</span>';
+  btn.innerHTML = '<span class="spin-wrap"><i class="spinner"></i>Оформляем заказ…</span>';
 
   try {
-    const res = await fetch(API + '/api/topup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        initData: tg?.initData || '',
-        user_id: getUserId(),
-        user_tag: getUserHashtag(),
-        message: text + '\n\n' + getUserHashtag()
-      })
+    const d = await api('/api/order', {
+      initData: a,
+      order: {
+        service: selected.service,
+        quantity: Number($('quantity').value),
+        link: $('link').value.trim()
+      }
     });
-    
-    toast('✅ Сообщение успешно отправлено!');
-    $('supportMessageText').value = '';
-    setTimeout(() => { $('chatOverlay').hidden = true; }, 1200);
-  } catch (e) {
-    toast('✅ Запрос отправлен!');
-    $('chatOverlay').hidden = true;
+
+    const newBal = Number(d.new_balance);
+    $('balance').textContent = formatMoney(newBal);
+    localStorage.setItem('vb_bal', String(newBal));
+
+    toast('✅ Заказ успешно оформлен!');
+    btn.innerHTML = '<span>Заказ принят!</span>';
+    btn.disabled = true;
+
+    setTimeout(() => { $('orderOverlay').hidden = true; }, 1800);
+  } catch (err){
+    showOrderError(err);
+    btn.disabled = false;
+    btn.innerHTML = '<span>Повторить попытку</span>';
+  } finally {
+    busy = false;
+  }
+};
+
+$('quantity').oninput = updatePrice;
+$('closeOrder').onclick = () => { if (!busy) $('orderOverlay').hidden = true; };
+$('openTopup').onclick = () => { $('topupOverlay').hidden = false; };
+$('closeTopup').onclick = () => { $('topupOverlay').hidden = true; };
+
+// Поиск в реальном времени + очистка
+$('search').oninput = () => { render(); };
+$('searchClear').onclick = () => {
+  $('search').value = '';
+  $('search').focus();
+  render();
+};
+
+$('home').onclick = () => {
+  network = null; category = null; $('search').value = ''; render();
+};
+$('back').onclick = () => {
+  if (category) category = null; else network = null;
+  render();
+};
+
+// Запрос на пополнение
+$('createTopup').onclick = async () => {
+  const btn = $('createTopup');
+  const errBox = $('topupErrBox');
+  errBox.classList.remove('show');
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin-wrap"><i class="spinner"></i>Отправляем…</span>';
+  try {
+    const d = await api('/api/topup', {
+      initData: auth(),
+      amount: Number($('topupAmount').value),
+      method: $('topupMethod').value
+    });
+    toast('✅ Запрос отправлен администратору');
+    $('topupErrTitle').textContent = 'Запрос успешно отправлен';
+    $('topupErrTitle').style.color = 'var(--green)';
+    $('topupErrDesc').textContent = d.message || 'Ожидайте проверки платежа.';
+    errBox.classList.add('show');
+    setTimeout(() => { $('topupOverlay').hidden = true; }, 2200);
+  } catch (e){
+    const info = classifyError(e);
+    $('topupErrTitle').textContent = info.title;
+    $('topupErrTitle').style.color = '#ff839a';
+    $('topupErrDesc').textContent = (info.code ? info.code + ': ' : '') + info.desc;
+    errBox.classList.add('show');
   } finally {
     btn.disabled = false;
-    btn.innerHTML = '<span>Отправить сообщение</span>';
+    btn.innerHTML = '<span>Создать запрос</span>';
   }
 };
 
-$('openDirectTgBtn').onclick = () => {
-  if (tg?.openTelegramLink) {
-    tg.openTelegramLink('https://t.me/' + ADMIN_TG_USERNAME);
-  } else {
-    window.open('https://t.me/' + ADMIN_TG_USERNAME, '_blank');
-  }
-};
+try { tg?.ready(); tg?.expand(); } catch (e) { console.error(e); }
 
-setTimeout(() => $('splash')?.classList.add('hide'), 1200);
+// Загрузка услуг
+(async () => {
+  try {
+    const r = await fetch('./services.json?v=' + Date.now());
+    if (!r.ok) throw Error('Каталог услуг временно недоступен');
+    const data = await r.json();
+    if (!Array.isArray(data) || !data.length) throw Error('Каталог пуст');
+
+    services = data.map(s => ({
+      ...s,
+      network: String(s.network || 'Без сети'),
+      category: String(s.category || 'Прочее'),
+      name: String(s.name || 'Услуга')
+    }));
+
+    render();
+  } catch (e){
+    $('grid').append(el('p', 'Не удалось загрузить каталог. Пожалуйста, обновите страницу.', 'empty-state'));
+    toast('Ошибка загрузки: ERR-CAT-404');
+  } finally {
+    hideSplash();
+    refreshBalance();
+  }
+})();
 </script>
 </body>
 </html>
