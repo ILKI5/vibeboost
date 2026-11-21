@@ -1,5 +1,4 @@
 import os
-import re
 import hmac
 import hashlib
 import json
@@ -122,6 +121,7 @@ def get_service(service_id: str) -> Optional[dict]:
     return CATALOG_BY_ID.get(str(service_id))
 
 
+# Реестр премиум-эмодзи площадок
 PREMIUM_EMOJI_IDS = {
     "Авито": "5206315603379373105",
     "Дзен": "5359312848247857963",
@@ -159,6 +159,7 @@ PREMIUM_EMOJI_IDS = {
     "YouTube": "5454010052421626926",
 }
 
+# Иконки разделов меню
 MENU_EMOJI_IDS = {
     "catalog": "5766994197705921104",
     "profile": "5879770735999717115",
@@ -168,6 +169,7 @@ MENU_EMOJI_IDS = {
     "obnova": "6221916841640464816",
 }
 
+# Кастомные анимированные прем-эмодзи
 EMOJI_DIGITS = {
     '0': '5778186427212764109',
     '1': '5780836954610340827',
@@ -182,22 +184,34 @@ EMOJI_DIGITS = {
     'rub': '5780627184112638724'
 }
 
-def format_money(value):
-    return f"{Decimal(str(value)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP):,}".replace(",", " ") + " ₽"
+DIGIT_FALLBACK = {
+    '0': '0️⃣',
+    '1': '1️⃣',
+    '2': '2️⃣',
+    '3': '3️⃣',
+    '4': '4️⃣',
+    '5': '5️⃣',
+    '6': '6️⃣',
+    '7': '7️⃣',
+    '8': '8️⃣',
+    '9': '9️⃣',
+    'rub': '🪙'
+}
 
 def format_balance_premium(amount: int | float) -> str:
-    """Анимированные премиум-эмодзи баланса со значком рубля"""
+    """Форматирует баланс кастомными анимированными премиум-эмодзи"""
     dec = Decimal(str(amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     amount_str = f"{dec:,.2f}".replace(",", " ")
     result = []
     for char in amount_str:
         if char in EMOJI_DIGITS:
             emoji_id = EMOJI_DIGITS[char]
-            result.append(f'<tg-emoji emoji-id="{emoji_id}">{char}</tg-emoji>')
+            fb = DIGIT_FALLBACK[char]
+            result.append(f'<tg-emoji emoji-id="{emoji_id}">{fb}</tg-emoji>')
         else:
             result.append(char)
     rub_id = EMOJI_DIGITS['rub']
-    result.append(f' <tg-emoji emoji-id="{rub_id}">₽</tg-emoji>')
+    result.append(f' <tg-emoji emoji-id="{rub_id}">🪙</tg-emoji>')
     return "".join(result)
 
 def tg_icon(name: str) -> str:
@@ -211,38 +225,6 @@ def tg_icon(name: str) -> str:
     if emoji_id:
         return f'<tg-emoji emoji-id="{emoji_id}">🌐</tg-emoji>'
     return "🌐"
-
-def strip_tg_emoji(text: str) -> str:
-    return re.sub(r'<tg-emoji[^>]*>(.*?)</tg-emoji>', r'\1', text)
-
-async def safe_render(chat_id: int, text: str, reply_markup: InlineKeyboardMarkup, message_to_edit: types.Message | None = None):
-    """
-    Гарантированно выводит интерфейс: сначала пытается отправить оригинальный текст
-    с кастомными премиум-эмодзи. При любых ограничениях Telegram плавно переходит на фоллбэк.
-    """
-    if message_to_edit:
-        try:
-            await message_to_edit.edit_text(text, reply_markup=reply_markup, parse_mode="HTML")
-            return
-        except Exception as exc:
-            err = str(exc).lower()
-            if "message is not modified" in err:
-                return
-            log.warning("edit_text failed with custom emoji: %s, trying fallback", exc)
-            try:
-                await message_to_edit.edit_text(strip_tg_emoji(text), reply_markup=reply_markup, parse_mode="HTML")
-                return
-            except Exception:
-                pass
-
-    try:
-        await bot.send_message(chat_id, text, reply_markup=reply_markup, parse_mode="HTML")
-    except Exception as exc:
-        log.warning("send_message failed with custom emoji: %s, sending plain version", exc)
-        try:
-            await bot.send_message(chat_id, strip_tg_emoji(text), reply_markup=reply_markup, parse_mode="HTML")
-        except Exception as exc_final:
-            log.exception("Критическая ошибка отправки: %s", exc_final)
 
 
 class BotOrder(StatesGroup):
@@ -288,6 +270,10 @@ def validate_init_data(raw: str) -> dict:
     if not user.get("id"):
         raise ValueError("В initData отсутствует пользователь")
     return user
+
+
+def format_money(value):
+    return f"{Decimal(str(value)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP):,}".replace(",", " ") + " ₽"
 
 
 def format_unit_price(rate_per_1000):
@@ -398,12 +384,12 @@ async def execute_provider_order(user_id: int, item: dict, link: str, quantity: 
         f"📊 <b>Количество:</b> <code>{quantity} шт.</code>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         f"💰 <b>Списано с баланса:</b> <code>{format_money(charge_amount)}</code>\n"
-        f"💳 <b>Остаток на балансе:</b> <b>{format_balance_premium(new_balance)}</b>\n"
+        f"💳 <b>Остаток на балансе:</b> {format_balance_premium(new_balance)}\n"
         f"🧾 <b>Номер заказа:</b> <code>#{provider_order_id}</code>\n\n"
         "<i>Заказ запущен в автоматическом режиме!</i>"
     )
     try:
-        await safe_render(user_id, user_receipt, main_menu_kb())
+        await bot.send_message(user_id, user_receipt, reply_markup=main_menu_kb(), parse_mode="HTML")
     except Exception:
         pass
 
@@ -494,7 +480,7 @@ def services_by_network_kb(net_idx: int, page: int = 0):
 
 
 # ==========================================
-# ОБРАБОТЧИКИ КОМАНД И МЕНЮ
+# ОБРАБОТЧИКИ КОМАНД И ПРОФИЛЯ
 # ==========================================
 
 @dp.message(Command("start"))
@@ -508,7 +494,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
         "Автоматическое продвижение и накрутка в топ для всех социальных сетей.\n\n"
         "Выбери действие ниже:"
     )
-    await safe_render(message.chat.id, text, main_menu_kb())
+    await message.answer(text, reply_markup=main_menu_kb(), parse_mode="HTML")
 
 
 @dp.callback_query(F.data == "bot:menu")
@@ -521,7 +507,7 @@ async def cb_main_menu(callback: types.CallbackQuery, state: FSMContext):
         "Автоматическое продвижение и накрутка в топ для всех социальных сетей.\n\n"
         "Выбери действие ниже:"
     )
-    await safe_render(callback.message.chat.id, text, main_menu_kb(), message_to_edit=callback.message)
+    await bot.send_message(callback.message.chat.id, text, reply_markup=main_menu_kb(), parse_mode="HTML")
 
 
 @dp.message(Command("profile", "профиль", "баланс"))
@@ -534,19 +520,19 @@ async def cmd_profile(message: types.Message, state: FSMContext):
 async def cb_profile(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.clear()
-    await show_profile(callback.message.chat.id, callback.from_user, message_to_edit=callback.message)
+    await show_profile(callback.message.chat.id, callback.from_user)
 
 
-async def show_profile(chat_id: int, user: types.User, message_to_edit: types.Message | None = None):
+async def show_profile(chat_id: int, user: types.User):
     balance = 0.0
     try:
         prof = await asyncio.wait_for(
             sheets("get_user", user_id=user.id, username=user.username or "", full_name=user.full_name or ""),
-            timeout=3.5
+            timeout=3.0
         )
         balance = float(prof.get("balance", 0))
     except Exception as exc:
-        log.warning("sheets get_user fallback to 0.0 for %s: %s", user.id, exc)
+        log.warning("sheets get_user fallback to 0: %s", exc)
 
     username = f"@{user.username}" if user.username else "не указан"
     balance_view = format_balance_premium(balance)
@@ -558,8 +544,8 @@ async def show_profile(chat_id: int, user: types.User, message_to_edit: types.Me
     text = (
         '<tg-emoji emoji-id="5190564364872101511">👤</tg-emoji> Ваш личный профиль\n'
         "━━━━━━━━━━━━━━━━━━━━\n"
-        f'<tg-emoji emoji-id="5192702953642830208">🔹</tg-emoji> Имя: {escape(user.full_name)}\n'
-        f'<tg-emoji emoji-id="5192798009859027969">🔹</tg-emoji> Username: {escape(username)}\n'
+        f'<tg-emoji emoji-id="5192702953642830208">👤</tg-emoji> Имя: {escape(user.full_name)}\n'
+        f'<tg-emoji emoji-id="5192798009859027969">🌐</tg-emoji> Username: {escape(username)}\n'
         f'<tg-emoji emoji-id="5291913773307667021">🆔</tg-emoji> Telegram ID: <code>{user.id}</code>\n'
         f"{status_warning}\n"
         f'<tg-emoji emoji-id="5456343516743483864">💳</tg-emoji> Текущий баланс: {balance_view}\n'
@@ -579,20 +565,24 @@ async def show_profile(chat_id: int, user: types.User, message_to_edit: types.Me
             make_btn("Меню", callback_data="bot:menu", emoji_id=MENU_EMOJI_IDS.get("menu")),
         ]
     ])
-    await safe_render(chat_id, text, kb, message_to_edit=message_to_edit)
+    await bot.send_message(chat_id, text, reply_markup=kb, parse_mode="HTML")
 
+
+# ==========================================
+# КАТАЛОГ И УСЛУГИ
+# ==========================================
 
 @dp.message(Command("catalog", "каталог", "услуги"))
 async def cmd_catalog(message: types.Message, state: FSMContext):
     await state.clear()
-    await safe_render(message.chat.id, "🌐 <b>Выберите социальную сеть для продвижения:</b>", networks_kb())
+    await message.answer("🌐 <b>Выберите социальную сеть для продвижения:</b>", reply_markup=networks_kb(), parse_mode="HTML")
 
 
 @dp.callback_query(F.data == "cat:home")
 async def cb_cat_home(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.clear()
-    await safe_render(callback.message.chat.id, "🌐 <b>Выберите социальную сеть для продвижения:</b>", networks_kb(), message_to_edit=callback.message)
+    await bot.send_message(callback.message.chat.id, "🌐 <b>Выберите социальную сеть для продвижения:</b>", reply_markup=networks_kb(), parse_mode="HTML")
 
 
 @dp.callback_query(F.data.startswith("net:"))
@@ -609,7 +599,7 @@ async def cb_choose_network(callback: types.CallbackQuery, state: FSMContext):
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Выберите услугу из списка ниже:"
     )
-    await safe_render(callback.message.chat.id, text, kb, message_to_edit=callback.message)
+    await bot.send_message(callback.message.chat.id, text, reply_markup=kb, parse_mode="HTML")
 
 
 @dp.callback_query(F.data.startswith("netpage:"))
@@ -627,7 +617,7 @@ async def cb_network_page(callback: types.CallbackQuery):
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Выберите услугу из списка ниже:"
     )
-    await safe_render(callback.message.chat.id, text, kb, message_to_edit=callback.message)
+    await bot.send_message(callback.message.chat.id, text, reply_markup=kb, parse_mode="HTML")
 
 
 @dp.callback_query(F.data == "cat:noop")
@@ -671,11 +661,11 @@ async def cb_service_card(callback: types.CallbackQuery, state: FSMContext):
             make_btn("Меню", callback_data="bot:menu", emoji_id=MENU_EMOJI_IDS.get("menu")),
         ]
     ])
-    await safe_render(callback.message.chat.id, text, kb, message_to_edit=callback.message)
+    await bot.send_message(callback.message.chat.id, text, reply_markup=kb, parse_mode="HTML")
 
 
 # ==========================================
-# ПОШАГОВЫЙ МАСТЕР ЗАКАЗА (WIZARD)
+# МАСТЕР ЗАКАЗА (WIZARD)
 # ==========================================
 
 @dp.callback_query(F.data.startswith("order:"))
@@ -696,21 +686,21 @@ async def cb_start_order(callback: types.CallbackQuery, state: FSMContext):
     icon = tg_icon(net)
     price = format_unit_price(item.get("rate", 0))
 
-    await safe_render(
+    await bot.send_message(
         callback.message.chat.id,
         f"{icon} <b>Оформление заказа:</b> «{escape(str(item.get('name')))}»\n"
         f"Цена за 1 шт: <code>{price}</code> | Лимиты: от <code>{item['min']}</code> до <code>{item['max']}</code>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "🔗 <b>Шаг 1:</b> Отправьте ссылку на пост, канал или страницу:\n\n"
         "<i>Для отмены напишите /cancel</i>",
-        main_menu_kb()
+        parse_mode="HTML"
     )
 
 
 @dp.message(Command("cancel"), StateFilter(BotOrder, BotTopup, BotSupport))
 async def cmd_cancel(message: types.Message, state: FSMContext):
     await state.clear()
-    await safe_render(message.chat.id, "❌ Действие отменено.", main_menu_kb())
+    await message.answer("❌ Действие отменено.", reply_markup=main_menu_kb(), parse_mode="HTML")
 
 
 @dp.message(BotOrder.waiting_link)
@@ -830,7 +820,7 @@ async def show_order_confirm(message: types.Message, state: FSMContext, item: di
     await state.update_data(order_cost=cost)
 
     try:
-        prof = await asyncio.wait_for(sheets("get_user", user_id=message.from_user.id), timeout=3.5)
+        prof = await asyncio.wait_for(sheets("get_user", user_id=message.from_user.id), timeout=3.0)
         current_balance = float(prof.get("balance", 0))
     except Exception:
         current_balance = 0.0
@@ -873,14 +863,14 @@ async def show_order_confirm(message: types.Message, state: FSMContext, item: di
         ])
 
     await state.set_state(BotOrder.confirming)
-    await safe_render(message.chat.id, text, kb)
+    await bot.send_message(message.chat.id, text, reply_markup=kb, parse_mode="HTML")
 
 
 @dp.callback_query(F.data == "botorder:cancel", StateFilter(BotOrder.confirming))
 async def cb_order_cancel(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.clear()
-    await safe_render(callback.message.chat.id, "❌ Заказ отменён.", main_menu_kb(), message_to_edit=callback.message)
+    await bot.send_message(callback.message.chat.id, "❌ Заказ отменён.", reply_markup=main_menu_kb(), parse_mode="HTML")
 
 
 @dp.callback_query(F.data == "botorder:confirm", StateFilter(BotOrder.confirming))
@@ -889,7 +879,7 @@ async def cb_order_confirm(callback: types.CallbackQuery, state: FSMContext):
     if is_banned(user_id):
         await callback.answer("🚫 Аккаунт заблокирован.", show_alert=True)
         await state.clear()
-        await safe_render(callback.message.chat.id, "🚫 <b>Ваш аккаунт заблокирован.</b>\nДля связи напишите в поддержку /support", main_menu_kb(), message_to_edit=callback.message)
+        await bot.send_message(callback.message.chat.id, "🚫 <b>Ваш аккаунт заблокирован.</b>\nДля связи напишите в поддержку /support", reply_markup=main_menu_kb(), parse_mode="HTML")
         return
 
     data = await state.get_data()
@@ -905,31 +895,31 @@ async def cb_order_confirm(callback: types.CallbackQuery, state: FSMContext):
     answer_number = data.get("order_answer_number")
 
     await callback.answer()
-    await safe_render(callback.message.chat.id, "⏳ <b>Создаём заказ у поставщика…</b>", InlineKeyboardMarkup(inline_keyboard=[]), message_to_edit=callback.message)
+    await bot.send_message(callback.message.chat.id, "⏳ <b>Создаём заказ у поставщика…</b>", parse_mode="HTML")
     await state.clear()
 
     try:
         res = await execute_provider_order(user_id, item, link, quantity, comments, answer_number)
         net = str(item.get("network"))
         icon = tg_icon(net)
-        await safe_render(
+        await bot.send_message(
             callback.message.chat.id,
             f"🎉 <b>Заказ #{escape(res['provider_id'])} успешно запущен!</b>\n"
             "━━━━━━━━━━━━━━━━━━━━\n"
             f"{icon} <b>Услуга:</b> {escape(str(item.get('name')))}\n"
             f"📊 <b>Количество:</b> <code>{quantity} шт.</code>\n"
             f"💰 <b>Списано:</b> <code>{format_money(res['charge'])}</code>\n"
-            f"💳 <b>Остаток на балансе:</b> <b>{format_balance_premium(res['new_balance'])}</b>",
-            main_menu_kb(),
-            message_to_edit=callback.message
+            f"💳 <b>Остаток на балансе:</b> {format_balance_premium(res['new_balance'])}",
+            reply_markup=main_menu_kb(),
+            parse_mode="HTML"
         )
     except Exception as exc:
-        await safe_render(
+        await bot.send_message(
             callback.message.chat.id,
             f"❌ <b>Не удалось оформить заказ:</b> {escape(str(exc))}\n\n"
             "Средства возвращены на ваш баланс.",
-            main_menu_kb(),
-            message_to_edit=callback.message
+            reply_markup=main_menu_kb(),
+            parse_mode="HTML"
         )
 
 
@@ -944,14 +934,14 @@ async def cb_topup_start(callback: types.CallbackQuery, state: FSMContext):
         return
     await callback.answer()
     await state.set_state(BotTopup.waiting_amount)
-    await safe_render(
+    await bot.send_message(
         callback.message.chat.id,
         "💳 <b>Пополнение баланса</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Введите сумму пополнения в рублях (от 10 до 100 000 ₽):\n\n"
         "<i>Для отмены напишите /cancel</i>",
-        main_menu_kb(),
-        message_to_edit=callback.message
+        reply_markup=main_menu_kb(),
+        parse_mode="HTML"
     )
 
 
@@ -986,12 +976,12 @@ async def process_topup_amount(message: types.Message, state: FSMContext):
     except Exception:
         pass
 
-    await safe_render(
-        message.chat.id,
+    await message.answer(
         "✅ <b>Запрос отправлен администратору!</b>\n\n"
         f"Сумма: <b>{format_money(amt)}</b>\n"
         "Баланс будет пополнен сразу после подтверждения платежа.",
-        main_menu_kb()
+        reply_markup=main_menu_kb(),
+        parse_mode="HTML"
     )
 
 
@@ -1006,14 +996,14 @@ async def cb_support_start(callback: types.CallbackQuery, state: FSMContext):
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [make_btn("Отмена", callback_data="bot:menu", emoji_id=MENU_EMOJI_IDS.get("menu"))]
     ])
-    await safe_render(
+    await bot.send_message(
         callback.message.chat.id,
         "💬 <b>Служба поддержки HEŪPO BOOST</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Пожалуйста, напишите ваш вопрос или опишите возникшую проблему одним сообщением.\n\n"
         "<i>Для отмены нажмите кнопку ниже или отправьте /cancel</i>",
-        kb,
-        message_to_edit=callback.message
+        reply_markup=kb,
+        parse_mode="HTML"
     )
 
 
@@ -1023,13 +1013,13 @@ async def cmd_support(message: types.Message, state: FSMContext):
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [make_btn("Отмена", callback_data="bot:menu", emoji_id=MENU_EMOJI_IDS.get("menu"))]
     ])
-    await safe_render(
-        message.chat.id,
+    await message.answer(
         "💬 <b>Служба поддержки HEŪPO BOOST</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Пожалуйста, напишите ваш вопрос или опишите возникшую проблему одним сообщением.\n\n"
         "<i>Для отмены отправьте /cancel</i>",
-        kb
+        reply_markup=kb,
+        parse_mode="HTML"
     )
 
 
@@ -1060,11 +1050,11 @@ async def process_support_question(message: types.Message, state: FSMContext):
     except Exception as exc:
         log.exception("Не удалось отправить вопрос в поддержку админу: %s", exc)
 
-    await safe_render(
-        message.chat.id,
+    await message.answer(
         "✅ <b>Ваш вопрос успешно передан в поддержку!</b>\n\n"
         "Администратор свяжется с вами или ответит прямо в этом чате в ближайшее время.",
-        main_menu_kb()
+        reply_markup=main_menu_kb(),
+        parse_mode="HTML"
     )
 
 
