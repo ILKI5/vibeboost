@@ -27,8 +27,7 @@ from pyrogram.types import (
 )
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
-log = logging.getLogger("HEUPO_BOOST")
-
+log = logging.getLogger("vibeboost")
 
 # Переменные окружения
 BOT_TOKEN = os.environ["BOT_TOKEN"].strip()
@@ -83,7 +82,7 @@ PREMIUM_EMOJI_IDS = {
 
 # Инициализация MTProto-клиента
 app_bot = Client(
-    name="HEUPO_BOOST_bot",
+    name="vibeboost_bot",
     api_id=API_ID,
     api_hash=API_HASH,
     bot_token=BOT_TOKEN,
@@ -91,7 +90,7 @@ app_bot = Client(
 )
 http: ClientSession | None = None
 
-# Простое хранилище состояний сессий бота (FSM)
+# Хранилище состояний сессий бота (FSM)
 USER_STATES: dict[int, dict] = {}
 
 
@@ -358,25 +357,33 @@ def services_kb(network: str, category: str, page: int = 0):
 
 
 # --- Обработчики Pyrogram ---
-@app_bot.on_message(filters.command("start") & filters.private)
+@app_bot.on_message(filters.command("start"))
 async def cmd_start(_, message: Message):
-    clear_user_state(message.from_user.id)
+    user = message.from_user
+    if user:
+        log.info("Received /start from user %s (@%s)", user.id, user.username)
+        clear_user_state(user.id)
+        name = escape(user.first_name or "Пользователь")
+    else:
+        name = "Пользователь"
     text = (
-        f"<b>Добро пожаловать в HEUPO_BOOST, {escape(message.from_user.first_name)}!</b>\n\n"
+        f"<b>Добро пожаловать в VibeBoost, {name}!</b>\n\n"
         "Выберите интересующий пункт меню или откройте каталог услуг:"
     )
     await message.reply_text(text, reply_markup=main_menu_kb())
 
 
-@app_bot.on_message(filters.command(["profile", "баланс"]) & filters.private)
+@app_bot.on_message(filters.command(["profile", "баланс"]))
 async def cmd_profile(_, message: Message):
-    clear_user_state(message.from_user.id)
-    await show_profile(message.chat.id, message.from_user)
+    if message.from_user:
+        clear_user_state(message.from_user.id)
+        await show_profile(message.chat.id, message.from_user)
 
 
-@app_bot.on_message(filters.command(["catalog", "услуги"]) & filters.private)
+@app_bot.on_message(filters.command(["catalog", "услуги"]))
 async def cmd_catalog(_, message: Message):
-    clear_user_state(message.from_user.id)
+    if message.from_user:
+        clear_user_state(message.from_user.id)
     await message.reply_text("<b>Выберите социальную сеть:</b>", reply_markup=networks_kb())
 
 
@@ -389,8 +396,8 @@ async def show_profile(chat_id: int, user, edit_message: Message | None = None):
 
     username = f"@{user.username}" if user.username else "не указан"
     text = (
-        "<b>Личный профиль HEUPO_BOOST</b>\n"
-        f"Имя: <b>{escape(user.first_name)}</b>\n"
+        "<b>Личный профиль VibeBoost</b>\n"
+        f"Имя: <b>{escape(user.first_name or 'Пользователь')}</b>\n"
         f"Username: <b>{escape(username)}</b>\n"
         f"Telegram ID: <code>{user.id}</code>\n\n"
         f"Баланс: <b>{format_money(balance)}</b>"
@@ -586,14 +593,17 @@ async def on_callback(_, cq: CallbackQuery):
     await cq.answer()
 
 
-@app_bot.on_message(filters.text & filters.private)
+@app_bot.on_message(filters.text)
 async def on_user_text(_, message: Message):
+    if not message.from_user:
+        return
     user_id = message.from_user.id
     text = (message.text or "").strip()
 
-    if text == "/cancel":
-        clear_user_state(user_id)
-        await message.reply_text("Действие отменено.", reply_markup=main_menu_kb())
+    if text.startswith("/"):
+        if text == "/cancel":
+            clear_user_state(user_id)
+            await message.reply_text("Действие отменено.", reply_markup=main_menu_kb())
         return
 
     st = get_user_state(user_id)
@@ -604,6 +614,10 @@ async def on_user_text(_, message: Message):
             await message.reply_text("Введите корректную ссылку:")
             return
         item = load_catalog().get(str(st.get("order_service_id")))
+        if not item:
+            clear_user_state(user_id)
+            await message.reply_text("Услуга недоступна. Откройте /catalog заново.")
+            return
         srv_type = item.get("type", "Default")
         st["order_link"] = text
 
@@ -773,7 +787,19 @@ async def topup_request(request):
 async def on_startup(app):
     global http
     http = ClientSession(timeout=ClientTimeout(total=25))
+
+    # 1. Принудительный сброс старого Webhook Telegram Bot API
+    try:
+        async with http.get(f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true") as resp:
+            data = await resp.text()
+            log.info("deleteWebhook response: %s", data)
+    except Exception as exc:
+        log.warning("Could not delete webhook: %s", exc)
+
+    # 2. Старт клиента Pyrogram
+    log.info("Starting Pyrogram bot client...")
     await app_bot.start()
+    log.info("Pyrogram bot client started successfully!")
 
 
 async def on_cleanup(app):
