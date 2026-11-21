@@ -47,7 +47,7 @@ http: ClientSession | None = None
 # IN-MEMORY КЭШ КАТАЛОГА (ОТВЕТ В ПАМЯТИ ЗА < 1 МС)
 # =====================================================================
 CATALOG_BY_ID: Dict[str, dict] = {}
-NETWORKS_LIST: List[tuple[str, int]] = []  # [(network_name, count), ...]
+NETWORKS_LIST: List[tuple[str, int]] = []
 SERVICES_BY_NET: Dict[str, List[dict]] = {}
 
 def init_catalog_cache():
@@ -75,11 +75,9 @@ def init_catalog_cache():
                     by_net[net] = []
                 by_net[net].append(item)
 
-        # Сортируем услуги внутри каждой соцсети заранее один раз
         for net in by_net:
             by_net[net].sort(key=lambda x: str(x.get("name", "")).casefold())
 
-        # Формируем отсортированный реестр соцсетей
         sorted_nets = sorted(by_net.keys(), key=str.casefold)
         net_list = [(net, len(by_net[net])) for net in sorted_nets]
 
@@ -90,14 +88,13 @@ def init_catalog_cache():
     except Exception as exc:
         log.exception("Ошибка инициализации каталога: %s", exc)
 
-# Инициализируем при импорте модуля
 init_catalog_cache()
 
 def get_service(service_id: str) -> Optional[dict]:
     return CATALOG_BY_ID.get(str(service_id))
 
 
-# Реестр премиум-эмодзи площадок tgiosicons
+# Реестр премиум-эмодзи площадок для кнопок (icon_custom_emoji_id)
 PREMIUM_EMOJI_IDS = {
     "Авито": "5206315603379373105",
     "Дзен": "5359312848247857963",
@@ -144,6 +141,19 @@ MENU_EMOJI_IDS = {
     "support": "6030400221232501136",
 }
 
+# Безопасные текстовые эмодзи (для сообщений бота)
+def tg_icon(name: str) -> str:
+    net_lower = name.lower()
+    if "telegram" in net_lower: return "✈️"
+    if "vk" in net_lower or "вконтакте" in net_lower: return "🟦"
+    if "youtube" in net_lower: return "▶️"
+    if "instagram" in net_lower: return "📸"
+    if "tiktok" in net_lower: return "🎵"
+    if "twitter" in net_lower: return "🐦"
+    if "twitch" in net_lower: return "🟣"
+    return "🌐"
+
+
 class BotOrder(StatesGroup):
     waiting_link = State()
     waiting_comments = State()
@@ -156,13 +166,6 @@ class BotTopup(StatesGroup):
 
 class BotSupport(StatesGroup):
     waiting_question = State()
-
-
-def tg_icon(name: str) -> str:
-    emoji_id = PREMIUM_EMOJI_IDS.get(name)
-    if emoji_id:
-        return f'<tg-emoji emoji-id="{emoji_id}">•</tg-emoji>'
-    return "•"
 
 
 def cors_headers():
@@ -318,7 +321,7 @@ async def execute_provider_order(user_id: int, item: dict, link: str, quantity: 
 
 
 # =====================================================================
-# КЛАВИАТУРЫ (МОМЕНТАЛЬНЫЙ РЕНДЕР ИЗ RAM)
+# КЛАВИАТУРЫ
 # =====================================================================
 
 def make_btn(text: str, callback_data: str | None = None, emoji_id: str | None = None, web_app: WebAppInfo | None = None) -> InlineKeyboardButton:
@@ -505,6 +508,7 @@ async def cb_cat_home(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+# Переход при клике на соц.сеть
 @dp.callback_query(F.data.startswith("net:"))
 async def cb_choose_network(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
