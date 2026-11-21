@@ -23,7 +23,7 @@ from aiogram.types import (
 )
 from aiogram.types import InlineKeyboardButton as _BaseInlineKeyboardButton
 
-# Расширение модели для сериализации icon_custom_emoji_id (Bot API 9.4+)
+# Расширение модели для сериализации icon_custom_emoji_id
 class InlineKeyboardButton(_BaseInlineKeyboardButton):
     icon_custom_emoji_id: Optional[str] = None
 
@@ -73,14 +73,13 @@ def is_banned(user_id: int) -> bool:
 load_banned_users()
 
 # =====================================================================
-# IN-MEMORY КЭШ КАТАЛОГА (ОТВЕТ В ПАМЯТИ ЗА < 1 МС)
+# IN-MEMORY КЭШ КАТАЛОГА
 # =====================================================================
 CATALOG_BY_ID: Dict[str, dict] = {}
 NETWORKS_LIST: List[tuple[str, int]] = []
 SERVICES_BY_NET: Dict[str, List[dict]] = {}
 
 def init_catalog_cache():
-    """Загружает и индексирует каталог в память один раз при старте."""
     global CATALOG_BY_ID, NETWORKS_LIST, SERVICES_BY_NET
     if not CATALOG_PATH.exists():
         log.warning("Файл каталога %s не найден при инициализации!", CATALOG_PATH)
@@ -123,7 +122,6 @@ def get_service(service_id: str) -> Optional[dict]:
     return CATALOG_BY_ID.get(str(service_id))
 
 
-# Реестр премиум-эмодзи площадок для кнопок и сообщений
 PREMIUM_EMOJI_IDS = {
     "Авито": "5206315603379373105",
     "Дзен": "5359312848247857963",
@@ -161,7 +159,6 @@ PREMIUM_EMOJI_IDS = {
     "YouTube": "5454010052421626926",
 }
 
-# Иконки разделов меню
 MENU_EMOJI_IDS = {
     "catalog": "5766994197705921104",
     "profile": "5879770735999717115",
@@ -171,7 +168,6 @@ MENU_EMOJI_IDS = {
     "obnova": "6221916841640464816",
 }
 
-# Кастомные премиум-эмодзи цифр и знака рубля
 EMOJI_DIGITS = {
     '0': '5778186427212764109',
     '1': '5780836954610340827',
@@ -186,25 +182,25 @@ EMOJI_DIGITS = {
     'rub': '5780627184112638724'
 }
 
+def format_money(value):
+    return f"{Decimal(str(value)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP):,}".replace(",", " ") + " ₽"
+
 def format_balance_premium(amount: int | float) -> str:
-    """Преобразует число баланса в кастомные премиум-эмодзи со значком рубля"""
+    """Анимированные премиум-эмодзи баланса со значком рубля"""
     dec = Decimal(str(amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     amount_str = f"{dec:,.2f}".replace(",", " ")
     result = []
-    
     for char in amount_str:
         if char in EMOJI_DIGITS:
             emoji_id = EMOJI_DIGITS[char]
             result.append(f'<tg-emoji emoji-id="{emoji_id}">{char}</tg-emoji>')
         else:
             result.append(char)
-            
     rub_id = EMOJI_DIGITS['rub']
     result.append(f' <tg-emoji emoji-id="{rub_id}">₽</tg-emoji>')
     return "".join(result)
 
 def tg_icon(name: str) -> str:
-    """Превращает название соцсети в премиум-эмодзи Telegram"""
     name_str = str(name).strip()
     emoji_id = PREMIUM_EMOJI_IDS.get(name_str)
     if not emoji_id:
@@ -217,11 +213,13 @@ def tg_icon(name: str) -> str:
     return "🌐"
 
 def strip_tg_emoji(text: str) -> str:
-    """Удаляет теги tg-emoji на случай, если бот не имеет прав на кастомные эмодзи в тексте"""
     return re.sub(r'<tg-emoji[^>]*>(.*?)</tg-emoji>', r'\1', text)
 
 async def safe_render(chat_id: int, text: str, reply_markup: InlineKeyboardMarkup, message_to_edit: types.Message | None = None):
-    """Безопасный вывод: сохраняет анимированные прем-эмодзи и защищает от сбоев Telegram."""
+    """
+    Гарантированно выводит интерфейс: сначала пытается отправить оригинальный текст
+    с кастомными премиум-эмодзи. При любых ограничениях Telegram плавно переходит на фоллбэк.
+    """
     if message_to_edit:
         try:
             await message_to_edit.edit_text(text, reply_markup=reply_markup, parse_mode="HTML")
@@ -230,21 +228,21 @@ async def safe_render(chat_id: int, text: str, reply_markup: InlineKeyboardMarku
             err = str(exc).lower()
             if "message is not modified" in err:
                 return
-            if "can't use custom emoji" in err or "custom_emoji" in err:
-                try:
-                    await message_to_edit.edit_text(strip_tg_emoji(text), reply_markup=reply_markup, parse_mode="HTML")
-                    return
-                except Exception:
-                    pass
+            log.warning("edit_text failed with custom emoji: %s, trying fallback", exc)
+            try:
+                await message_to_edit.edit_text(strip_tg_emoji(text), reply_markup=reply_markup, parse_mode="HTML")
+                return
+            except Exception:
+                pass
 
     try:
         await bot.send_message(chat_id, text, reply_markup=reply_markup, parse_mode="HTML")
     except Exception as exc:
-        err = str(exc).lower()
-        if "can't use custom emoji" in err or "custom_emoji" in err:
+        log.warning("send_message failed with custom emoji: %s, sending plain version", exc)
+        try:
             await bot.send_message(chat_id, strip_tg_emoji(text), reply_markup=reply_markup, parse_mode="HTML")
-        else:
-            log.exception("Ошибка safe_render: %s", exc)
+        except Exception as exc_final:
+            log.exception("Критическая ошибка отправки: %s", exc_final)
 
 
 class BotOrder(StatesGroup):
@@ -290,10 +288,6 @@ def validate_init_data(raw: str) -> dict:
     if not user.get("id"):
         raise ValueError("В initData отсутствует пользователь")
     return user
-
-
-def format_money(value):
-    return f"{Decimal(str(value)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP):,}".replace(",", " ") + " ₽"
 
 
 def format_unit_price(rate_per_1000):
@@ -445,7 +439,6 @@ def main_menu_kb():
 
 
 def networks_kb():
-    """Сетка соцсетей СТРОГО В ДВА СТОЛБЦА."""
     buttons = []
     row = []
     for index, (net, count) in enumerate(NETWORKS_LIST):
@@ -466,7 +459,6 @@ def networks_kb():
 
 
 def services_by_network_kb(net_idx: int, page: int = 0):
-    """Список услуг соцсети."""
     if not NETWORKS_LIST:
         return "Прочее", [], 1, 0, InlineKeyboardMarkup(inline_keyboard=[])
 
@@ -521,8 +513,8 @@ async def cmd_start(message: types.Message, state: FSMContext):
 
 @dp.callback_query(F.data == "bot:menu")
 async def cb_main_menu(callback: types.CallbackQuery, state: FSMContext):
-    await state.clear()
     await callback.answer()
+    await state.clear()
     text = (
         "👋 <b>Главное меню HEŪPO BOOST</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
@@ -540,17 +532,21 @@ async def cmd_profile(message: types.Message, state: FSMContext):
 
 @dp.callback_query(F.data == "bot:profile")
 async def cb_profile(callback: types.CallbackQuery, state: FSMContext):
-    await state.clear()
     await callback.answer()
+    await state.clear()
     await show_profile(callback.message.chat.id, callback.from_user, message_to_edit=callback.message)
 
 
 async def show_profile(chat_id: int, user: types.User, message_to_edit: types.Message | None = None):
+    balance = 0.0
     try:
-        prof = await sheets("get_user", user_id=user.id, username=user.username or "", full_name=user.full_name or "")
+        prof = await asyncio.wait_for(
+            sheets("get_user", user_id=user.id, username=user.username or "", full_name=user.full_name or ""),
+            timeout=3.5
+        )
         balance = float(prof.get("balance", 0))
-    except Exception:
-        balance = 0.0
+    except Exception as exc:
+        log.warning("sheets get_user fallback to 0.0 for %s: %s", user.id, exc)
 
     username = f"@{user.username}" if user.username else "не указан"
     balance_view = format_balance_premium(balance)
@@ -594,15 +590,15 @@ async def cmd_catalog(message: types.Message, state: FSMContext):
 
 @dp.callback_query(F.data == "cat:home")
 async def cb_cat_home(callback: types.CallbackQuery, state: FSMContext):
-    await state.clear()
     await callback.answer()
+    await state.clear()
     await safe_render(callback.message.chat.id, "🌐 <b>Выберите социальную сеть для продвижения:</b>", networks_kb(), message_to_edit=callback.message)
 
 
 @dp.callback_query(F.data.startswith("net:"))
 async def cb_choose_network(callback: types.CallbackQuery, state: FSMContext):
-    await state.clear()
     await callback.answer()
+    await state.clear()
     idx = int(callback.data.split(":")[1])
     net, items, pages, page, kb = services_by_network_kb(idx, 0)
     icon = tg_icon(net)
@@ -834,7 +830,7 @@ async def show_order_confirm(message: types.Message, state: FSMContext, item: di
     await state.update_data(order_cost=cost)
 
     try:
-        prof = await sheets("get_user", user_id=message.from_user.id)
+        prof = await asyncio.wait_for(sheets("get_user", user_id=message.from_user.id), timeout=3.5)
         current_balance = float(prof.get("balance", 0))
     except Exception:
         current_balance = 0.0
@@ -882,8 +878,8 @@ async def show_order_confirm(message: types.Message, state: FSMContext, item: di
 
 @dp.callback_query(F.data == "botorder:cancel", StateFilter(BotOrder.confirming))
 async def cb_order_cancel(callback: types.CallbackQuery, state: FSMContext):
-    await state.clear()
     await callback.answer()
+    await state.clear()
     await safe_render(callback.message.chat.id, "❌ Заказ отменён.", main_menu_kb(), message_to_edit=callback.message)
 
 
@@ -891,16 +887,16 @@ async def cb_order_cancel(callback: types.CallbackQuery, state: FSMContext):
 async def cb_order_confirm(callback: types.CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
     if is_banned(user_id):
-        await state.clear()
         await callback.answer("🚫 Аккаунт заблокирован.", show_alert=True)
+        await state.clear()
         await safe_render(callback.message.chat.id, "🚫 <b>Ваш аккаунт заблокирован.</b>\nДля связи напишите в поддержку /support", main_menu_kb(), message_to_edit=callback.message)
         return
 
     data = await state.get_data()
     item = get_service(str(data.get("order_service_id")))
     if not item:
-        await state.clear()
         await callback.answer("Услуга недоступна", show_alert=True)
+        await state.clear()
         return
 
     link = str(data.get("order_link"))
@@ -946,8 +942,8 @@ async def cb_topup_start(callback: types.CallbackQuery, state: FSMContext):
     if is_banned(callback.from_user.id):
         await callback.answer("🚫 Ваш аккаунт заблокирован.", show_alert=True)
         return
-    await state.set_state(BotTopup.waiting_amount)
     await callback.answer()
+    await state.set_state(BotTopup.waiting_amount)
     await safe_render(
         callback.message.chat.id,
         "💳 <b>Пополнение баланса</b>\n"
@@ -1000,13 +996,13 @@ async def process_topup_amount(message: types.Message, state: FSMContext):
 
 
 # ==========================================
-# ПОДДЕРЖКА (РАБОТАЕТ ДАЖЕ ПРИ БАНЕ)
+# ПОДДЕРЖКА
 # ==========================================
 
 @dp.callback_query(F.data == "bot:support")
 async def cb_support_start(callback: types.CallbackQuery, state: FSMContext):
-    await state.set_state(BotSupport.waiting_question)
     await callback.answer()
+    await state.set_state(BotSupport.waiting_question)
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [make_btn("Отмена", callback_data="bot:menu", emoji_id=MENU_EMOJI_IDS.get("menu"))]
     ])
