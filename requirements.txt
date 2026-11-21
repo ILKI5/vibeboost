@@ -1,2 +1,2 @@
 aiohttp>=3.9,<4
-aiogram>=3.7,<4
+aiogram>=3.17.0
