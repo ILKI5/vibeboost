@@ -1,9 +1,15 @@
+import asyncio
+try:
+    asyncio.get_event_loop()
+except RuntimeError:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
 import os
 import hmac
 import hashlib
 import json
 import logging
-import asyncio
 import time
 from pathlib import Path
 from urllib.parse import parse_qsl
@@ -21,7 +27,8 @@ from pyrogram.types import (
 )
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
-log = logging.getLogger("vibeboost")
+log = logging.getLogger("HEUPO_BOOST")
+
 
 # Переменные окружения
 BOT_TOKEN = os.environ["BOT_TOKEN"].strip()
@@ -76,7 +83,7 @@ PREMIUM_EMOJI_IDS = {
 
 # Инициализация MTProto-клиента
 app_bot = Client(
-    name="vibeboost_bot",
+    name="HEUPO_BOOST_bot",
     api_id=API_ID,
     api_hash=API_HASH,
     bot_token=BOT_TOKEN,
@@ -355,7 +362,7 @@ def services_kb(network: str, category: str, page: int = 0):
 async def cmd_start(_, message: Message):
     clear_user_state(message.from_user.id)
     text = (
-        f"<b>Добро пожаловать в VibeBoost, {escape(message.from_user.first_name)}!</b>\n\n"
+        f"<b>Добро пожаловать в HEUPO_BOOST, {escape(message.from_user.first_name)}!</b>\n\n"
         "Выберите интересующий пункт меню или откройте каталог услуг:"
     )
     await message.reply_text(text, reply_markup=main_menu_kb())
@@ -382,7 +389,7 @@ async def show_profile(chat_id: int, user, edit_message: Message | None = None):
 
     username = f"@{user.username}" if user.username else "не указан"
     text = (
-        "<b>Личный профиль VibeBoost</b>\n"
+        "<b>Личный профиль HEUPO_BOOST</b>\n"
         f"Имя: <b>{escape(user.first_name)}</b>\n"
         f"Username: <b>{escape(username)}</b>\n"
         f"Telegram ID: <code>{user.id}</code>\n\n"
