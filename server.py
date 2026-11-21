@@ -136,9 +136,10 @@ PREMIUM_EMOJI_IDS = {
 MENU_EMOJI_IDS = {
     "catalog": "5766994197705921104",
     "profile": "5879770735999717115",
-    "topup": "5404629224281612936",
+    "topup": "5882207227997066107",
     "menu": "5850309953293653168",
     "support": "6030400221232501136",
+    "obnova": "6221916841640464816",
 }
 
 # Безопасные текстовые эмодзи (для сообщений бота)
@@ -259,13 +260,13 @@ async def execute_provider_order(user_id: int, item: dict, link: str, quantity: 
             data = json.loads(raw)
     except Exception:
         log.exception("Twiboost error for %s", user_id)
-        raise RuntimeError("Статус заказа уточняется у поставщика.")
+        raise RuntimeError("Статус заказа уточняется...")
 
     provider_order_id = data.get("order")
     if provider_order_id is None:
-        err = str(data.get("error", "Отказ поставщика"))
+        err = str(data.get("error", "Заказ отклонён"))
         await sheets("refund", user_id=user_id, amount=charge_amount, comment=f"Возврат: {service_id}")
-        raise RuntimeError(f"Поставщик отклонил заказ: {err}")
+        raise RuntimeError(f"Заказ отклонён, напишите в поддержку: {err}")
 
     provider_order_id = str(provider_order_id)
     new_balance = float(charged.get("balance", 0))
@@ -477,7 +478,7 @@ async def show_profile(chat_id: int, user: types.User, message_to_edit: types.Me
         ],
         [
             make_btn("Поддержка", callback_data="bot:support", emoji_id=MENU_EMOJI_IDS.get("support")),
-            make_btn("Обновить", callback_data="bot:profile"),
+            make_btn("Обновить", callback_data="bot:profile", emoji_id=MENU_EMOJI_IDS.get("obnova")),
         ],
         [
             make_btn("Меню", callback_data="bot:menu", emoji_id=MENU_EMOJI_IDS.get("menu")),
