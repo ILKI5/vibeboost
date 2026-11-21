@@ -1,4 +1,5 @@
 import os
+import re
 import hmac
 import hashlib
 import json
@@ -22,7 +23,7 @@ from aiogram.types import (
 )
 from aiogram.types import InlineKeyboardButton as _BaseInlineKeyboardButton
 
-# Расширение модели для гарантированной сериализации icon_custom_emoji_id (Bot API 9.4+)
+# Расширение модели для сериализации icon_custom_emoji_id (Bot API 9.4+)
 class InlineKeyboardButton(_BaseInlineKeyboardButton):
     icon_custom_emoji_id: Optional[str] = None
 
@@ -37,11 +38,39 @@ SHEETS_API_SECRET = os.environ["SHEETS_API_SECRET"].strip()
 TWIBOOST_API_KEY = os.environ["TWIBOOST_API_KEY"].strip()
 PORT = int(os.getenv("PORT", "8080"))
 CATALOG_PATH = Path(os.getenv("CATALOG_PATH", "services.json"))
+BANNED_FILE = Path(os.getenv("BANNED_FILE", "banned.json"))
 PAGE_SIZE = 6
 
 bot = Bot(BOT_TOKEN)
 dp = Dispatcher()
 http: ClientSession | None = None
+
+# =====================================================================
+# СИСТЕМА БАНОВ
+# =====================================================================
+BANNED_USERS: set[int] = set()
+
+def load_banned_users():
+    global BANNED_USERS
+    if BANNED_FILE.exists():
+        try:
+            data = json.loads(BANNED_FILE.read_text(encoding="utf-8"))
+            if isinstance(data, list):
+                BANNED_USERS = set(int(x) for x in data)
+                log.info("Загружено %d заблокированных пользователей.", len(BANNED_USERS))
+        except Exception as exc:
+            log.exception("Ошибка загрузки banned.json: %s", exc)
+
+def save_banned_users():
+    try:
+        BANNED_FILE.write_text(json.dumps(list(BANNED_USERS), ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as exc:
+        log.exception("Ошибка сохранения banned.json: %s", exc)
+
+def is_banned(user_id: int) -> bool:
+    return int(user_id) in BANNED_USERS
+
+load_banned_users()
 
 # =====================================================================
 # IN-MEMORY КЭШ КАТАЛОГА (ОТВЕТ В ПАМЯТИ ЗА < 1 МС)
@@ -174,7 +203,6 @@ def format_balance_premium(amount: int | float) -> str:
     result.append(f' <tg-emoji emoji-id="{rub_id}">₽</tg-emoji>')
     return "".join(result)
 
-# Премиум эмодзи для текста сообщений (вместо обычных безопасных)
 def tg_icon(name: str) -> str:
     """Превращает название соцсети в премиум-эмодзи Telegram"""
     name_str = str(name).strip()
@@ -187,6 +215,36 @@ def tg_icon(name: str) -> str:
     if emoji_id:
         return f'<tg-emoji emoji-id="{emoji_id}">🌐</tg-emoji>'
     return "🌐"
+
+def strip_tg_emoji(text: str) -> str:
+    """Удаляет теги tg-emoji на случай, если бот не имеет прав на кастомные эмодзи в тексте"""
+    return re.sub(r'<tg-emoji[^>]*>(.*?)</tg-emoji>', r'\1', text)
+
+async def safe_render(chat_id: int, text: str, reply_markup: InlineKeyboardMarkup, message_to_edit: types.Message | None = None):
+    """Безопасный вывод: сохраняет анимированные прем-эмодзи и защищает от сбоев Telegram."""
+    if message_to_edit:
+        try:
+            await message_to_edit.edit_text(text, reply_markup=reply_markup, parse_mode="HTML")
+            return
+        except Exception as exc:
+            err = str(exc).lower()
+            if "message is not modified" in err:
+                return
+            if "can't use custom emoji" in err or "custom_emoji" in err:
+                try:
+                    await message_to_edit.edit_text(strip_tg_emoji(text), reply_markup=reply_markup, parse_mode="HTML")
+                    return
+                except Exception:
+                    pass
+
+    try:
+        await bot.send_message(chat_id, text, reply_markup=reply_markup, parse_mode="HTML")
+    except Exception as exc:
+        err = str(exc).lower()
+        if "can't use custom emoji" in err or "custom_emoji" in err:
+            await bot.send_message(chat_id, strip_tg_emoji(text), reply_markup=reply_markup, parse_mode="HTML")
+        else:
+            log.exception("Ошибка safe_render: %s", exc)
 
 
 class BotOrder(StatesGroup):
@@ -266,6 +324,9 @@ async def sheets(action: str, **fields):
 
 async def execute_provider_order(user_id: int, item: dict, link: str, quantity: int,
                                  comments: str | None = None, answer_number: str | None = None):
+    if is_banned(user_id):
+        raise ValueError("Ваш аккаунт заблокирован. Оформление заказов недоступно.")
+
     service_id = str(item["service"])
     charge_amount = order_cost(item["rate"], quantity)
     if charge_amount <= 0:
@@ -348,7 +409,7 @@ async def execute_provider_order(user_id: int, item: dict, link: str, quantity: 
         "<i>Заказ запущен в автоматическом режиме!</i>"
     )
     try:
-        await bot.send_message(user_id, user_receipt, parse_mode="HTML")
+        await safe_render(user_id, user_receipt, main_menu_kb())
     except Exception:
         pass
 
@@ -384,7 +445,7 @@ def main_menu_kb():
 
 
 def networks_kb():
-    """Сетка соцсетей СТРОГО В ДВА СТОЛБЦА (готовые данные из RAM)."""
+    """Сетка соцсетей СТРОГО В ДВА СТОЛБЦА."""
     buttons = []
     row = []
     for index, (net, count) in enumerate(NETWORKS_LIST):
@@ -405,7 +466,7 @@ def networks_kb():
 
 
 def services_by_network_kb(net_idx: int, page: int = 0):
-    """Список услуг без повторного парсинга файла."""
+    """Список услуг соцсети."""
     if not NETWORKS_LIST:
         return "Прочее", [], 1, 0, InlineKeyboardMarkup(inline_keyboard=[])
 
@@ -455,23 +516,20 @@ async def cmd_start(message: types.Message, state: FSMContext):
         "Автоматическое продвижение и накрутка в топ для всех социальных сетей.\n\n"
         "Выбери действие ниже:"
     )
-    await message.answer(text, reply_markup=main_menu_kb(), parse_mode="HTML")
+    await safe_render(message.chat.id, text, main_menu_kb())
 
 
 @dp.callback_query(F.data == "bot:menu")
 async def cb_main_menu(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
+    await callback.answer()
     text = (
         "👋 <b>Главное меню HEŪPO BOOST</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Автоматическое продвижение и накрутка в топ для всех социальных сетей.\n\n"
         "Выбери действие ниже:"
     )
-    try:
-        await callback.message.edit_text(text, reply_markup=main_menu_kb(), parse_mode="HTML")
-    except Exception:
-        await callback.message.answer(text, reply_markup=main_menu_kb(), parse_mode="HTML")
-    await callback.answer()
+    await safe_render(callback.message.chat.id, text, main_menu_kb(), message_to_edit=callback.message)
 
 
 @dp.message(Command("profile", "профиль", "баланс"))
@@ -483,8 +541,8 @@ async def cmd_profile(message: types.Message, state: FSMContext):
 @dp.callback_query(F.data == "bot:profile")
 async def cb_profile(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
-    await show_profile(callback.message.chat.id, callback.from_user, message_to_edit=callback.message)
     await callback.answer()
+    await show_profile(callback.message.chat.id, callback.from_user, message_to_edit=callback.message)
 
 
 async def show_profile(chat_id: int, user: types.User, message_to_edit: types.Message | None = None):
@@ -497,12 +555,17 @@ async def show_profile(chat_id: int, user: types.User, message_to_edit: types.Me
     username = f"@{user.username}" if user.username else "не указан"
     balance_view = format_balance_premium(balance)
 
+    status_warning = ""
+    if is_banned(user.id):
+        status_warning = "\n⚠️ <b>Статус: АККАУНТ ЗАБЛОКИРОВАН</b>\n"
+
     text = (
         '<tg-emoji emoji-id="5190564364872101511">👤</tg-emoji> Ваш личный профиль\n'
         "━━━━━━━━━━━━━━━━━━━━\n"
         f'<tg-emoji emoji-id="5192702953642830208">🔹</tg-emoji> Имя: {escape(user.full_name)}\n'
         f'<tg-emoji emoji-id="5192798009859027969">🔹</tg-emoji> Username: {escape(username)}\n'
-        f'<tg-emoji emoji-id="5291913773307667021">🆔</tg-emoji> Telegram ID: <code>{user.id}</code>\n\n'
+        f'<tg-emoji emoji-id="5291913773307667021">🆔</tg-emoji> Telegram ID: <code>{user.id}</code>\n'
+        f"{status_warning}\n"
         f'<tg-emoji emoji-id="5456343516743483864">💳</tg-emoji> Текущий баланс: {balance_view}\n'
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Пополняйте баланс и запускайте заказы в 1 клик!"
@@ -520,32 +583,26 @@ async def show_profile(chat_id: int, user: types.User, message_to_edit: types.Me
             make_btn("Меню", callback_data="bot:menu", emoji_id=MENU_EMOJI_IDS.get("menu")),
         ]
     ])
-    if message_to_edit:
-        try:
-            await message_to_edit.edit_text(text, reply_markup=kb, parse_mode="HTML")
-            return
-        except Exception:
-            pass
-    await bot.send_message(chat_id, text, reply_markup=kb, parse_mode="HTML")
+    await safe_render(chat_id, text, kb, message_to_edit=message_to_edit)
 
 
 @dp.message(Command("catalog", "каталог", "услуги"))
 async def cmd_catalog(message: types.Message, state: FSMContext):
     await state.clear()
-    await message.answer("🌐 <b>Выберите социальную сеть для продвижения:</b>", reply_markup=networks_kb(), parse_mode="HTML")
+    await safe_render(message.chat.id, "🌐 <b>Выберите социальную сеть для продвижения:</b>", networks_kb())
 
 
 @dp.callback_query(F.data == "cat:home")
 async def cb_cat_home(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
-    await callback.message.edit_text("🌐 <b>Выберите социальную сеть для продвижения:</b>", reply_markup=networks_kb(), parse_mode="HTML")
     await callback.answer()
+    await safe_render(callback.message.chat.id, "🌐 <b>Выберите социальную сеть для продвижения:</b>", networks_kb(), message_to_edit=callback.message)
 
 
-# Переход при клике на соц.сеть
 @dp.callback_query(F.data.startswith("net:"))
 async def cb_choose_network(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
+    await callback.answer()
     idx = int(callback.data.split(":")[1])
     net, items, pages, page, kb = services_by_network_kb(idx, 0)
     icon = tg_icon(net)
@@ -556,12 +613,12 @@ async def cb_choose_network(callback: types.CallbackQuery, state: FSMContext):
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Выберите услугу из списка ниже:"
     )
-    await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
-    await callback.answer()
+    await safe_render(callback.message.chat.id, text, kb, message_to_edit=callback.message)
 
 
 @dp.callback_query(F.data.startswith("netpage:"))
 async def cb_network_page(callback: types.CallbackQuery):
+    await callback.answer()
     parts = callback.data.split(":")
     net_idx = int(parts[1])
     page = int(parts[2])
@@ -574,8 +631,7 @@ async def cb_network_page(callback: types.CallbackQuery):
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Выберите услугу из списка ниже:"
     )
-    await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
-    await callback.answer()
+    await safe_render(callback.message.chat.id, text, kb, message_to_edit=callback.message)
 
 
 @dp.callback_query(F.data == "cat:noop")
@@ -585,6 +641,7 @@ async def cb_noop(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data.startswith("srv:"))
 async def cb_service_card(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
     parts = callback.data.split(":")
     srv_id = parts[1]
     net_idx = parts[2] if len(parts) > 2 else "0"
@@ -618,8 +675,7 @@ async def cb_service_card(callback: types.CallbackQuery, state: FSMContext):
             make_btn("Меню", callback_data="bot:menu", emoji_id=MENU_EMOJI_IDS.get("menu")),
         ]
     ])
-    await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
-    await callback.answer()
+    await safe_render(callback.message.chat.id, text, kb, message_to_edit=callback.message)
 
 
 # ==========================================
@@ -628,36 +684,46 @@ async def cb_service_card(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(F.data.startswith("order:"))
 async def cb_start_order(callback: types.CallbackQuery, state: FSMContext):
+    if is_banned(callback.from_user.id):
+        await callback.answer("🚫 Ваш аккаунт заблокирован. Заказ невозможен.", show_alert=True)
+        return
+
     srv_id = callback.data.split(":")[1]
     item = get_service(srv_id)
     if not item:
         await callback.answer("Услуга недоступна", show_alert=True)
         return
+    await callback.answer()
     await state.set_state(BotOrder.waiting_link)
     await state.update_data(order_service_id=srv_id)
     net = str(item.get("network"))
     icon = tg_icon(net)
     price = format_unit_price(item.get("rate", 0))
 
-    await callback.message.answer(
+    await safe_render(
+        callback.message.chat.id,
         f"{icon} <b>Оформление заказа:</b> «{escape(str(item.get('name')))}»\n"
         f"Цена за 1 шт: <code>{price}</code> | Лимиты: от <code>{item['min']}</code> до <code>{item['max']}</code>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "🔗 <b>Шаг 1:</b> Отправьте ссылку на пост, канал или страницу:\n\n"
         "<i>Для отмены напишите /cancel</i>",
-        parse_mode="HTML"
+        main_menu_kb()
     )
-    await callback.answer()
 
 
 @dp.message(Command("cancel"), StateFilter(BotOrder, BotTopup, BotSupport))
 async def cmd_cancel(message: types.Message, state: FSMContext):
     await state.clear()
-    await message.answer("❌ Действие отменено.", reply_markup=main_menu_kb())
+    await safe_render(message.chat.id, "❌ Действие отменено.", main_menu_kb())
 
 
 @dp.message(BotOrder.waiting_link)
 async def process_link(message: types.Message, state: FSMContext):
+    if is_banned(message.from_user.id):
+        await state.clear()
+        await message.answer("🚫 Ваш аккаунт заблокирован. Вы не можете оформлять заказы.")
+        return
+
     link = (message.text or "").strip()
     if not link or len(link) > 700:
         await message.answer("⚠️ Пожалуйста, отправьте корректную ссылку:")
@@ -811,58 +877,64 @@ async def show_order_confirm(message: types.Message, state: FSMContext, item: di
         ])
 
     await state.set_state(BotOrder.confirming)
-    await message.answer(text, reply_markup=kb, parse_mode="HTML")
+    await safe_render(message.chat.id, text, kb)
 
 
 @dp.callback_query(F.data == "botorder:cancel", StateFilter(BotOrder.confirming))
 async def cb_order_cancel(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
-    await callback.message.edit_text("❌ Заказ отменён.", reply_markup=main_menu_kb())
     await callback.answer()
+    await safe_render(callback.message.chat.id, "❌ Заказ отменён.", main_menu_kb(), message_to_edit=callback.message)
 
 
 @dp.callback_query(F.data == "botorder:confirm", StateFilter(BotOrder.confirming))
 async def cb_order_confirm(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    if is_banned(user_id):
+        await state.clear()
+        await callback.answer("🚫 Аккаунт заблокирован.", show_alert=True)
+        await safe_render(callback.message.chat.id, "🚫 <b>Ваш аккаунт заблокирован.</b>\nДля связи напишите в поддержку /support", main_menu_kb(), message_to_edit=callback.message)
+        return
+
     data = await state.get_data()
     item = get_service(str(data.get("order_service_id")))
     if not item:
         await state.clear()
-        await callback.message.edit_text("⚠️ Услуга больше недоступна.")
-        await callback.answer()
+        await callback.answer("Услуга недоступна", show_alert=True)
         return
 
-    user_id = callback.from_user.id
     link = str(data.get("order_link"))
     quantity = int(data.get("order_quantity", 0))
     comments = data.get("order_comments")
     answer_number = data.get("order_answer_number")
 
-    await callback.message.edit_text("⏳ <b>Создаём заказ у поставщика…</b>", parse_mode="HTML")
+    await callback.answer()
+    await safe_render(callback.message.chat.id, "⏳ <b>Создаём заказ у поставщика…</b>", InlineKeyboardMarkup(inline_keyboard=[]), message_to_edit=callback.message)
     await state.clear()
 
     try:
         res = await execute_provider_order(user_id, item, link, quantity, comments, answer_number)
         net = str(item.get("network"))
         icon = tg_icon(net)
-        await callback.message.edit_text(
+        await safe_render(
+            callback.message.chat.id,
             f"🎉 <b>Заказ #{escape(res['provider_id'])} успешно запущен!</b>\n"
             "━━━━━━━━━━━━━━━━━━━━\n"
             f"{icon} <b>Услуга:</b> {escape(str(item.get('name')))}\n"
             f"📊 <b>Количество:</b> <code>{quantity} шт.</code>\n"
             f"💰 <b>Списано:</b> <code>{format_money(res['charge'])}</code>\n"
             f"💳 <b>Остаток на балансе:</b> <b>{format_balance_premium(res['new_balance'])}</b>",
-            reply_markup=main_menu_kb(),
-            parse_mode="HTML"
+            main_menu_kb(),
+            message_to_edit=callback.message
         )
     except Exception as exc:
-        await callback.message.edit_text(
+        await safe_render(
+            callback.message.chat.id,
             f"❌ <b>Не удалось оформить заказ:</b> {escape(str(exc))}\n\n"
             "Средства возвращены на ваш баланс.",
-            reply_markup=main_menu_kb(),
-            parse_mode="HTML"
+            main_menu_kb(),
+            message_to_edit=callback.message
         )
-    finally:
-        await callback.answer()
 
 
 # ==========================================
@@ -871,19 +943,29 @@ async def cb_order_confirm(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(F.data == "bot:topup")
 async def cb_topup_start(callback: types.CallbackQuery, state: FSMContext):
+    if is_banned(callback.from_user.id):
+        await callback.answer("🚫 Ваш аккаунт заблокирован.", show_alert=True)
+        return
     await state.set_state(BotTopup.waiting_amount)
-    await callback.message.edit_text(
+    await callback.answer()
+    await safe_render(
+        callback.message.chat.id,
         "💳 <b>Пополнение баланса</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Введите сумму пополнения в рублях (от 10 до 100 000 ₽):\n\n"
         "<i>Для отмены напишите /cancel</i>",
-        parse_mode="HTML"
+        main_menu_kb(),
+        message_to_edit=callback.message
     )
-    await callback.answer()
 
 
 @dp.message(BotTopup.waiting_amount)
 async def process_topup_amount(message: types.Message, state: FSMContext):
+    if is_banned(message.from_user.id):
+        await state.clear()
+        await message.answer("🚫 Ваш аккаунт заблокирован.")
+        return
+
     raw = (message.text or "").strip().replace(",", ".")
     try:
         amt = round(float(raw), 2)
@@ -908,34 +990,35 @@ async def process_topup_amount(message: types.Message, state: FSMContext):
     except Exception:
         pass
 
-    await message.answer(
+    await safe_render(
+        message.chat.id,
         "✅ <b>Запрос отправлен администратору!</b>\n\n"
         f"Сумма: <b>{format_money(amt)}</b>\n"
         "Баланс будет пополнен сразу после подтверждения платежа.",
-        reply_markup=main_menu_kb(),
-        parse_mode="HTML"
+        main_menu_kb()
     )
 
 
 # ==========================================
-# ПОДДЕРЖКА
+# ПОДДЕРЖКА (РАБОТАЕТ ДАЖЕ ПРИ БАНЕ)
 # ==========================================
 
 @dp.callback_query(F.data == "bot:support")
 async def cb_support_start(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(BotSupport.waiting_question)
+    await callback.answer()
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [make_btn("Отмена", callback_data="bot:menu", emoji_id=MENU_EMOJI_IDS.get("menu"))]
     ])
-    await callback.message.edit_text(
+    await safe_render(
+        callback.message.chat.id,
         "💬 <b>Служба поддержки HEŪPO BOOST</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Пожалуйста, напишите ваш вопрос или опишите возникшую проблему одним сообщением.\n\n"
         "<i>Для отмены нажмите кнопку ниже или отправьте /cancel</i>",
-        reply_markup=kb,
-        parse_mode="HTML"
+        kb,
+        message_to_edit=callback.message
     )
-    await callback.answer()
 
 
 @dp.message(Command("support", "поддержка", "help"))
@@ -944,13 +1027,13 @@ async def cmd_support(message: types.Message, state: FSMContext):
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [make_btn("Отмена", callback_data="bot:menu", emoji_id=MENU_EMOJI_IDS.get("menu"))]
     ])
-    await message.answer(
+    await safe_render(
+        message.chat.id,
         "💬 <b>Служба поддержки HEŪPO BOOST</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Пожалуйста, напишите ваш вопрос или опишите возникшую проблему одним сообщением.\n\n"
         "<i>Для отмены отправьте /cancel</i>",
-        reply_markup=kb,
-        parse_mode="HTML"
+        kb
     )
 
 
@@ -963,9 +1046,10 @@ async def process_support_question(message: types.Message, state: FSMContext):
 
     await state.clear()
     user = message.from_user
+    ban_tag = " <b>[ЗАБЛОКИРОВАН]</b>" if is_banned(user.id) else ""
 
     admin_msg = (
-        "🆘 <b>Новое обращение в поддержку!</b>\n"
+        f"🆘 <b>Новое обращение в поддержку!</b>{ban_tag}\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         f"👤 От: {escape(user.full_name)} (@{escape(user.username or 'не указан')})\n"
         f"🆔 Telegram ID: <code>{user.id}</code>\n\n"
@@ -980,17 +1064,69 @@ async def process_support_question(message: types.Message, state: FSMContext):
     except Exception as exc:
         log.exception("Не удалось отправить вопрос в поддержку админу: %s", exc)
 
-    await message.answer(
+    await safe_render(
+        message.chat.id,
         "✅ <b>Ваш вопрос успешно передан в поддержку!</b>\n\n"
         "Администратор свяжется с вами или ответит прямо в этом чате в ближайшее время.",
-        reply_markup=main_menu_kb(),
-        parse_mode="HTML"
+        main_menu_kb()
     )
 
 
 # ==========================================
-# АДМИН-КОМАНДЫ
+# АДМИН-КОМАНДЫ (BAN, UNBAN, ADDBALANCE, SEND, RELOAD)
 # ==========================================
+
+@dp.message(Command("ban"))
+async def cmd_ban(message: types.Message):
+    if message.from_user.id != ADMIN_CHAT_ID:
+        return
+    parts = (message.text or "").split(maxsplit=2)
+    if len(parts) < 2 or not parts[1].isdigit():
+        await message.reply("Использование: <code>/ban user_id [причина]</code>", parse_mode="HTML")
+        return
+    target_id = int(parts[1])
+    reason = parts[2] if len(parts) > 2 else "Нарушение правил сервиса"
+
+    BANNED_USERS.add(target_id)
+    save_banned_users()
+
+    await message.reply(f"🚫 Пользователь <code>{target_id}</code> успешно <b>заблокирован</b>.\nПричина: {escape(reason)}", parse_mode="HTML")
+    try:
+        await bot.send_message(
+            target_id,
+            f"🚫 <b>Ваш аккаунт был заблокирован администратором.</b>\n\n"
+            f"Причина: <i>{escape(reason)}</i>\n\n"
+            "Оформление заказов недоступно. Если вы считаете, что это ошибка, обратитесь в поддержку через /support.",
+            parse_mode="HTML"
+        )
+    except Exception:
+        pass
+
+
+@dp.message(Command("unban"))
+async def cmd_unban(message: types.Message):
+    if message.from_user.id != ADMIN_CHAT_ID:
+        return
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) < 2 or not parts[1].isdigit():
+        await message.reply("Использование: <code>/unban user_id</code>", parse_mode="HTML")
+        return
+    target_id = int(parts[1])
+    if target_id in BANNED_USERS:
+        BANNED_USERS.discard(target_id)
+        save_banned_users()
+        await message.reply(f"✅ Пользователь <code>{target_id}</code> успешно <b>разблокирован</b>.", parse_mode="HTML")
+        try:
+            await bot.send_message(
+                target_id,
+                "🎉 <b>Ваш аккаунт разблокирован!</b>\nТеперь вам снова доступны заказы в сервисе HEŪPO BOOST.",
+                parse_mode="HTML"
+            )
+        except Exception:
+            pass
+    else:
+        await message.reply(f"ℹ️ Пользователь <code>{target_id}</code> не был в списке заблокированных.", parse_mode="HTML")
+
 
 @dp.message(Command("addbalance"))
 async def cmd_addbalance(message: types.Message):
@@ -1031,7 +1167,6 @@ async def cmd_send(message: types.Message):
 
 @dp.message(Command("reload"))
 async def cmd_reload_catalog(message: types.Message):
-    """Команда для админа: перезагрузить каталог из services.json без перезапуска сервера."""
     if message.from_user.id != ADMIN_CHAT_ID:
         return
     init_catalog_cache()
@@ -1044,13 +1179,14 @@ async def forward_to_admin(message: types.Message):
         return
     user = message.from_user
     text = message.text or message.caption or "(без текста)"
+    ban_tag = " <b>[ЗАБЛОКИРОВАН]</b>" if is_banned(user.id) else ""
     admin_text = (
-        f"📩 <b>Сообщение от пользователя</b>\n"
+        f"📩 <b>Сообщение от пользователя</b>{ban_tag}\n"
         f"👤 {escape(user.full_name)} (@{escape(user.username or 'не указан')})\n"
         f"🆔 ID: <code>{user.id}</code>\n\n"
         f"{escape(text)}\n\n"
         f"Ответить: <code>/send {user.id} </code>\n"
-        f"Пополнить: <code>/addbalance {user.id} </code>\n#id{user.id}"
+        f"Бан/Разбан: <code>/ban {user.id}</code> | <code>/unban {user.id}</code>\n#id{user.id}"
     )
     try:
         await bot.send_message(ADMIN_CHAT_ID, admin_text, parse_mode="HTML")
@@ -1074,6 +1210,7 @@ async def user_info(request):
         return web.json_response({
             "ok": True,
             "balance": float(prof.get("balance", 0)),
+            "is_banned": is_banned(int(u["id"])),
             "user": {"id": u["id"], "first_name": u.get("first_name", ""), "username": u.get("username", "")}
         }, headers=cors_headers())
     except Exception as exc:
@@ -1086,13 +1223,17 @@ async def submit_order(request):
     try:
         payload = await request.json()
         u = validate_init_data(str(payload.get("initData", "")))
+        user_id = int(u["id"])
+        if is_banned(user_id):
+            raise ValueError("Ваш аккаунт заблокирован. Оформление заказов недоступно.")
+
         o = payload.get("order") or {}
         item = get_service(str(o.get("service", "")))
         if not item:
             raise ValueError("Услуга не найдена")
         qty = int(o.get("quantity", 0))
         link = str(o.get("link", "")).strip()
-        res = await execute_provider_order(int(u["id"]), item, link, qty, o.get("comments"), o.get("answer_number"))
+        res = await execute_provider_order(user_id, item, link, qty, o.get("comments"), o.get("answer_number"))
         return web.json_response({"ok": True, **res}, headers=cors_headers())
     except Exception as exc:
         return web.json_response({"ok": False, "error": str(exc)}, status=500, headers=cors_headers())
@@ -1104,6 +1245,8 @@ async def topup_request(request):
     try:
         payload = await request.json()
         u = validate_init_data(str(payload.get("initData", "")))
+        if is_banned(int(u["id"])):
+            raise ValueError("Ваш аккаунт заблокирован.")
         amt = float(payload.get("amount", 0))
         await bot.send_message(ADMIN_CHAT_ID, f"💳 Запрос пополнения: ID {u['id']} на {amt} ₽\n#id{u['id']}")
         return web.json_response({"ok": True}, headers=cors_headers())
