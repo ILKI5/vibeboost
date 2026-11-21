@@ -344,9 +344,6 @@ def main_menu_kb():
         [
             make_btn("Пополнить баланс", callback_data="bot:topup", emoji_id=MENU_EMOJI_IDS.get("topup")),
             make_btn("Поддержка", callback_data="bot:support", emoji_id=MENU_EMOJI_IDS.get("support")),
-        ],
-        [
-            make_btn("Mini App", web_app=WebAppInfo(url=WEBAPP_ORIGIN)),
         ]
     ])
 
