@@ -1,980 +1,150 @@
 <!doctype html>
-<html lang="ru">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>VibeBoost</title>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>VibeBoost</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
-:root{
-  color-scheme:dark;
-  --bg:#050711;
-  --panel:rgba(18,24,42,0.72);
-  --glass:rgba(255,255,255,0.055);
-  --line:rgba(255,255,255,0.08);
-  --line-active:rgba(142,98,255,0.45);
-  --text:#f4f5ff;
-  --muted:#8e9cb9;
-  --accent:#8e62ff;
-  --cyan:#3fe0ff;
-  --green:#4ff3a6;
-  --red:#ff5c7a;
-}
-*{box-sizing:border-box}
-html,body{margin:0;min-height:100%;background:var(--bg)}
-body{
-  font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-  color:var(--text);overflow-x:hidden;-webkit-font-smoothing:antialiased;
-}
-
-/* Оптимизированный плавный canvas (DPR=1, легкие спрайты) */
-canvas#bgCanvas{position:fixed;inset:0;width:100%;height:100%;z-index:0;display:block;pointer-events:none}
-.vignette{position:fixed;inset:0;z-index:1;pointer-events:none;background:radial-gradient(ellipse at 50% 20%,transparent 35%,rgba(3,5,14,.65) 100%)}
-.app{position:relative;z-index:2}
-
-/* Header */
-header{
-  position:sticky;top:0;z-index:40;padding:11px 18px;
-  background:rgba(6,9,19,0.75);
-  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
-  border-bottom:1px solid var(--line);
-}
-.header-row{max-width:1000px;margin:auto;display:flex;align-items:center;justify-content:space-between;gap:12px}
-.logo-btn{border:0;background:none;color:#fff;font-size:23px;font-weight:900;letter-spacing:-.6px;cursor:pointer;padding:0}
-.logo-btn span{
-  background:linear-gradient(115deg,#a97dff,#3fe0ff,#a97dff);background-size:220% auto;
-  -webkit-background-clip:text;background-clip:text;color:transparent;
-  animation:shimmer 5s linear infinite;
-}
-@keyframes shimmer{to{background-position:220% center}}
-
-.balance-pill{
-  display:flex;align-items:center;gap:9px;padding:6px 13px;border:1px solid var(--line);border-radius:999px;
-  background:rgba(255,255,255,0.04);box-shadow:0 4px 18px rgba(0,0,0,0.3);
-  transition:border-color .2s;
-}
-.balance-pill:hover{border-color:var(--line-active)}
-.bal-label{color:var(--muted);font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase}
-.bal-val{font-weight:800;color:var(--green);white-space:nowrap;font-size:14px;text-shadow:0 0 12px rgba(79,243,166,0.3)}
-.plus-btn{
-  width:26px;height:26px;border:0;border-radius:50%;color:#fff;
-  background:linear-gradient(135deg,#8e62ff,#5231db);font-size:17px;font-weight:700;line-height:1;
-  display:grid;place-items:center;cursor:pointer;box-shadow:0 0 14px rgba(142,98,255,0.5);
-  transition:transform .15s,box-shadow .2s;
-}
-.plus-btn:hover{box-shadow:0 0 22px rgba(142,98,255,0.8)}
-.plus-btn:active{transform:scale(.88)}
-
-.wrap{max-width:1000px;margin:auto;padding:16px 16px 70px}
-.hero{padding:10px 0 18px}
-.badge-tag{
-  display:inline-flex;align-items:center;gap:7px;padding:5px 12px;
-  border:1px solid rgba(169,130,255,0.28);border-radius:999px;background:rgba(142,98,255,0.08);
-  color:#d4c6ff;font-size:10.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;
-}
-.badge-dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green)}
-.hero h1{
-  font-size:clamp(28px,5.8vw,44px);line-height:1.08;letter-spacing:-1.2px;margin:12px 0 8px;font-weight:900;
-}
-.hero h1 span{
-  background:linear-gradient(110deg,#fff,#c3a8ff 45%,#3fe0ff);
-  -webkit-background-clip:text;background-clip:text;color:transparent;
-}
-.hero p{margin:0;color:var(--muted);font-size:14px;max-width:520px}
-
-/* Поиск */
-.search-container{position:relative;margin:16px 0 20px}
-.search-wrapper{
-  position:relative;display:flex;align-items:center;
-  background:rgba(255,255,255,0.045);border:1px solid var(--line);border-radius:16px;
-  transition:border-color .2s,box-shadow .2s;
-}
-.search-wrapper:focus-within{
-  border-color:rgba(142,98,255,0.6);box-shadow:0 0 0 3px rgba(142,98,255,0.15);
-}
-.search-icon{padding-left:16px;color:var(--muted);font-size:15px;pointer-events:none}
-.search-input{
-  flex:1;min-width:0;padding:13px 14px;border:0;background:none;color:var(--text);
-  outline:0;font-size:14px;
-}
-.search-input::placeholder{color:#6c7896}
-.search-clear{
-  border:0;background:none;color:var(--muted);font-size:17px;cursor:pointer;
-  padding:8px 14px;display:none;line-height:1;
-}
-.search-clear.show{display:block}
-
-/* Заголовок секции результатов */
-.section-title{
-  display:flex;justify-content:space-between;align-items:center;margin:0 0 12px;
-  font-size:14px;font-weight:700;color:var(--muted);
-}
-.section-title span{color:var(--accent)}
-
-/* Карточки */
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(255px,1fr));gap:12px}
-.card{
-  position:relative;display:flex;align-items:center;gap:14px;width:100%;min-height:86px;padding:15px 17px;
-  text-align:left;color:var(--text);border:1px solid var(--line);border-radius:18px;
-  background:linear-gradient(135deg,rgba(255,255,255,0.05),rgba(255,255,255,0.015));
-  box-shadow:0 8px 24px rgba(0,0,0,0.22);
-  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
-  overflow:hidden;cursor:pointer;
-  transition:transform .18s ease,border-color .2s,box-shadow .2s;
-}
-.card:hover{transform:translateY(-2px);border-color:rgba(169,130,255,0.45);box-shadow:0 12px 30px rgba(108,58,255,0.18)}
-.card:active{transform:scale(.985)}
-.card-icon{
-  display:grid;place-items:center;flex:0 0 46px;width:46px;height:46px;border-radius:14px;
-  background:linear-gradient(135deg,rgba(142,98,255,0.22),rgba(63,224,255,0.12));
-  border:1px solid rgba(255,255,255,0.12);color:#d9ccff;font-weight:900;font-size:14px;
-}
-.card-icon img{width:40px;height:40px;object-fit:contain}
-.card-info{flex:1;min-width:0}
-.card-title{display:block;font-weight:800;font-size:14.5px;line-height:1.25;overflow-wrap:anywhere}
-.card-sub{display:block;color:var(--muted);font-size:11.5px;margin-top:3px}
-.card-price-block{text-align:right;flex-shrink:0;padding-left:8px}
-.card-price{display:block;color:#d5c8ff;font-weight:800;font-size:13px;white-space:nowrap}
-.card-unit{display:block;color:var(--muted);font-size:10px;margin-top:1px}
-.card-arrow{color:#7683a3;font-size:20px;padding-left:4px;transition:transform .2s}
-.card:hover .card-arrow{transform:translateX(3px);color:#fff}
-
-.back-btn{
-  border:1px solid var(--line);border-radius:13px;padding:9px 14px;background:rgba(255,255,255,0.05);
-  color:var(--text);cursor:pointer;margin-bottom:12px;font-weight:700;font-size:13px;
-  display:inline-flex;align-items:center;gap:7px;transition:border-color .2s;
-}
-.back-btn:hover{border-color:var(--accent)}
-.empty-state{padding:34px 20px;color:var(--muted);text-align:center;font-size:14px}
-.footer-text{margin-top:38px;color:#596480;font-size:11.5px;text-align:center}
-
-/* Модалки */
-.overlay{
-  position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;padding:16px;
-  background:rgba(2,4,12,0.8);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
-}
-.sheet{
-  width:100%;max-width:520px;max-height:90dvh;overflow:auto;padding:22px;
-  border:1px solid rgba(255,255,255,0.12);border-radius:24px;
-  background:linear-gradient(155deg,#151d34 0%,#090e1d 100%);
-  box-shadow:0 30px 90px rgba(0,0,0,0.85);
-}
-.sheet-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px}
-.sheet-head h2{margin:0;font-size:19px;font-weight:900}
-.close-btn{
-  width:32px;height:32px;flex:0 0 32px;border-radius:50%;border:1px solid var(--line);
-  background:rgba(255,255,255,0.05);color:var(--muted);font-size:15px;
-  display:grid;place-items:center;cursor:pointer;
-}
-.close-btn:hover{color:#fff;border-color:rgba(255,255,255,0.3)}
-.sheet-desc{
-  max-height:120px;overflow:auto;white-space:pre-wrap;margin:12px 0;padding:11px 13px;
-  border-radius:13px;border:1px solid rgba(255,255,255,0.05);
-  background:rgba(0,0,0,0.35);color:var(--muted);font-size:12.5px;line-height:1.45;
-}
-.sheet-meta{color:var(--muted);font-size:12px;margin-top:3px}
-label{display:block;margin:13px 0 6px;font-size:12.5px;color:#ccd3e6;font-weight:700}
-.field{
-  width:100%;padding:12px 15px;border:1px solid var(--line);border-radius:13px;
-  background:rgba(0,0,0,0.32);color:var(--text);outline:0;font-size:14px;
-  transition:border-color .2s;
-}
-.field:focus{border-color:rgba(142,98,255,0.7)}
-
-.price-calc-box{
-  margin:16px 0;padding:14px 16px;border-radius:15px;border:1px solid rgba(255,255,255,0.08);
-  background:linear-gradient(115deg,rgba(142,98,255,0.18),rgba(63,224,255,0.08));
-}
-.calc-row{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:var(--muted);margin-bottom:6px}
-.calc-row.total-row{margin:8px 0 0;padding-top:8px;border-top:1px solid rgba(255,255,255,0.08);font-size:14.5px;font-weight:800;color:var(--text)}
-.calc-val{color:#5ce6ff;font-size:17px;font-weight:900}
-
-/* Блок ошибки внутри модалки */
-.err-box{
-  display:none;margin-top:12px;padding:12px 14px;border-radius:14px;
-  background:rgba(255,92,122,0.12);border:1px solid rgba(255,92,122,0.35);
-  color:#ffd2dc;font-size:13px;line-height:1.4;
-}
-.err-box.show{display:block}
-.err-box strong{display:block;color:#ff839a;margin-bottom:3px}
-.err-code{
-  display:inline-block;margin-top:5px;padding:2px 8px;border-radius:6px;
-  background:rgba(0,0,0,0.35);color:#fff;font-family:monospace;font-size:11.5px;
-}
-.err-btn-wrap{margin-top:10px}
-
-/* Кнопка заказа */
-.glow-btn{
-  position:relative;width:100%;padding:13px;border:0;border-radius:15px;overflow:hidden;
-  background:linear-gradient(110deg,#7c4fff,#a45aff 35%,#3fe0ff 70%,#7c4fff 100%);
-  background-size:300% auto;color:#fff;font-weight:800;font-size:15px;cursor:pointer;
-  box-shadow:0 8px 26px rgba(142,98,255,0.38);
-  transition:transform .15s,box-shadow .2s;
-  animation:btnFlow 6s linear infinite;
-}
-@keyframes btnFlow{to{background-position:300% center}}
-.glow-btn:hover{transform:translateY(-1px);box-shadow:0 12px 32px rgba(142,98,255,0.55)}
-.glow-btn:active{transform:scale(.98)}
-.glow-btn:disabled{opacity:.62;cursor:not-allowed;transform:none}
-.spin-wrap{display:inline-flex;align-items:center;gap:8px}
-.spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin .65s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-
-/* Toast */
-#toast{
-  position:fixed;left:50%;bottom:24px;z-index:200;transform:translateX(-50%);
-  max-width:92vw;padding:12px 18px;font-size:13px;font-weight:600;white-space:pre-wrap;
-  border:1px solid rgba(169,130,255,0.4);border-radius:14px;
-  background:rgba(18,14,34,0.96);backdrop-filter:blur(14px);color:#fff;
-  box-shadow:0 12px 35px rgba(0,0,0,0.6);
-}
-
-/* Splash */
-.splash{position:fixed;inset:0;z-index:300;display:grid;place-items:center;background:#050711;transition:opacity .35s,visibility .35s}
-.splash.hide{opacity:0;visibility:hidden;pointer-events:none}
-.splash-inner{text-align:center}
-.splash-title{font-size:30px;font-weight:900;letter-spacing:-.8px}
-.splash-title span{background:linear-gradient(115deg,#a97dff,#3fe0ff);-webkit-background-clip:text;background-clip:text;color:transparent}
-.splash-ring{
-  width:42px;height:42px;margin:18px auto 12px;border-radius:50%;
-  border:3px solid rgba(255,255,255,0.08);border-top-color:#8e62ff;border-right-color:#3fe0ff;
-  animation:spin .8s linear infinite;
-}
-.splash-text{color:var(--muted);font-size:12px}
-
-[hidden]{display:none!important}
-@media(max-width:600px){
-  .wrap{padding:14px 14px 60px}
-  .hero h1{font-size:30px}
-  .bal-label{display:none}
-  .sheet{padding:18px;border-radius:20px}
-}
-</style>
-</head>
-<body>
-
-<canvas id="bgCanvas"></canvas>
-<div class="vignette"></div>
-
-<div class="splash" id="splash">
-  <div class="splash-inner">
-    <div class="splash-title">Vibe<span>Boost</span></div>
-    <div class="splash-ring"></div>
-    <div class="splash-text">Загружаем каталог…</div>
-  </div>
-</div>
-
-<div class="app">
-  <header>
-    <div class="header-row">
-      <button class="logo-btn" id="home">Vibe<span>Boost</span></button>
-      <div class="balance-pill">
-        <span class="bal-label">Баланс</span>
-        <span class="bal-val" id="balance">… ₽</span>
-        <button class="plus-btn" id="openTopup" aria-label="Пополнить">+</button>
-      </div>
-    </div>
-  </header>
-
-  <main class="wrap">
-    <section class="hero">
-      <div class="badge-tag"><span class="badge-dot"></span> Продвижение нового уровня</div>
-      <h1>Выбирай.<br><span>Запускай результат.</span></h1>
-      <p>Услуги для быстрого и безопасного роста твоих социальных сетей.</p>
-    </section>
-
-    <!-- Поиск со сбросом -->
-    <div class="search-container">
-      <div class="search-wrapper">
-        <span class="search-icon">🔍</span>
-        <input class="search-input" id="search" type="search" placeholder="Поиск: подписчики, лайки, telegram, id…">
-        <button class="search-clear" id="searchClear" aria-label="Очистить">✕</button>
-      </div>
-    </div>
-
-    <button class="back-btn" id="back" hidden>← Назад</button>
-
-    <div class="section-title" id="sectionTitle">
-      <span id="sectionTitleText">Категории</span>
-      <small id="counter"></small>
-    </div>
-
-    <div class="grid" id="grid"></div>
-    <div class="footer-text">Оплата моментально списывается с баланса профиля</div>
-  </main>
-
-  <!-- Модалка заказа -->
-  <div class="overlay" id="orderOverlay" hidden>
-    <section class="sheet">
-      <div class="sheet-head">
-        <h2>Оформление заказа</h2>
-        <button class="close-btn" id="closeOrder">✕</button>
-      </div>
-      <strong id="serviceName" style="font-size:15px"></strong>
-      <div class="sheet-meta" id="serviceMeta"></div>
-      <div class="sheet-desc" id="description"></div>
-
-      <form id="orderForm">
-        <label for="link">Ссылка на страницу / канал / @username</label>
-        <input class="field" id="link" required maxlength="700" placeholder="https://… или @username">
-
-        <label for="quantity">Количество <span class="sheet-meta" id="limits"></span></label>
-        <input class="field" id="quantity" type="number" step="1" required>
-
-        <div class="price-calc-box">
-          <div class="calc-row">
-            <span>Цена за 1 шт.:</span>
-            <strong id="unitPriceLabel">—</strong>
-          </div>
-          <div class="calc-row total-row">
-            <span>Итого к списанию:</span>
-            <span class="calc-val" id="total">—</span>
-          </div>
-        </div>
-
-        <button class="glow-btn" id="submit" type="submit"><span>Подтвердить заказ</span></button>
-
-        <!-- Блок понятной ошибки для пользователя -->
-        <div class="err-box" id="orderErrBox">
-          <strong id="errTitle">Ошибка</strong>
-          <span id="errDesc"></span>
-          <div id="errCodeBadge"></div>
-          <div class="err-btn-wrap" id="errTopupBtnWrap" hidden>
-            <button type="button" class="back-btn" id="errTopupBtn" style="margin-top:8px;width:100%;justify-content:center">Пополнить баланс +</button>
-          </div>
-        </div>
-      </form>
-    </section>
-  </div>
-
-  <!-- Модалка пополнения -->
-  <div class="overlay" id="topupOverlay" hidden>
-    <section class="sheet">
-      <div class="sheet-head">
-        <h2>Пополнение баланса</h2>
-        <button class="close-btn" id="closeTopup">✕</button>
-      </div>
-      <p class="sheet-meta" style="margin-top:0">Укажите сумму перевода. Администратор проверит и зачислит средства.</p>
-
-      <label for="topupAmount">Сумма, ₽</label>
-      <input class="field" id="topupAmount" type="number" min="10" max="100000" value="100">
-
-      <label for="topupMethod">Способ оплаты</label>
-      <select class="field" id="topupMethod">
-        <option value="sbp">СБП / Банковская карта РФ</option>
-        <option value="crypto">Криптовалюта (USDT / TON / BTC)</option>
-        <option value="other">Другой способ</option>
-      </select>
-
-      <button class="glow-btn" id="createTopup" style="margin-top:18px"><span>Создать запрос</span></button>
-
-      <div class="err-box" id="topupErrBox">
-        <strong id="topupErrTitle"></strong>
-        <span id="topupErrDesc"></span>
-      </div>
-    </section>
-  </div>
-
-  <div id="toast" hidden></div>
-</div>
-
+:root{color-scheme:dark;--bg:#0a1020;--panel:#151e33;--line:#303c59;--text:#eef0ff;--muted:#a5afcb;--accent:#a18aff}*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top,#302151,var(--bg) 65%);background-attachment:fixed;color:var(--text);font:16px/1.5 system-ui,sans-serif;min-height:100vh}button,input{font:inherit}button{cursor:pointer}header{border-bottom:1px solid var(--line);background:#0a1020dd;padding:16px}.header{max-width:964px;margin:auto;display:flex;align-items:center;justify-content:space-between;gap:12px}.logo{background:none;border:0;color:#b8a6ff;font-size:25px;font-weight:800;padding:0}.balance{display:flex;align-items:center;gap:8px;background:var(--panel);padding:7px 11px;border:1px solid var(--line);border-radius:99px}.bal{color:#79f2ab;font-weight:700}.plus{width:28px;height:28px;border:0;border-radius:50%;background:var(--accent);color:white;font-weight:bold;font-size:20px}.wrap{max-width:1000px;margin:auto;padding:24px 18px}.muted{color:var(--muted);font-size:13px}h1{font-size:25px;margin:10px 0 20px}.tools{display:flex;gap:12px;align-items:center;margin-bottom:20px;flex-wrap:wrap}input{width:100%;background:#0c1426;color:var(--text);border:1px solid var(--line);border-radius:12px;padding:13px;min-width:0}input:focus{outline:2px solid var(--accent)}#search{flex:1;min-width:180px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}.card{display:flex;align-items:center;gap:14px;text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:18px;color:inherit;min-height:90px;min-width:0}.card-info{flex:1;min-width:0}.title{display:block;font-weight:700;overflow-wrap:anywhere}.subtitle{display:block;color:var(--muted);font-size:13px;margin-top:5px}.icon{flex:0 0 48px;width:48px;height:48px;display:grid;place-items:center;border-radius:12px;background:#292642;color:#cfbdff;font-weight:bold}.icon img{width:48px;height:48px;object-fit:contain}.price{display:block;color:#c3afff;margin-top:8px;font-weight:700}.button{border:1px solid var(--line);border-radius:12px;padding:11px 16px;background:var(--panel);color:inherit}.primary{background:linear-gradient(110deg,#7857df,#a462df);border:0;font-weight:700;color:white}.back{margin-bottom:16px}.empty{color:var(--muted);padding:20px}.overlay{position:fixed;inset:0;background:#030713dd;z-index:100;display:flex;align-items:center;justify-content:center;padding:16px}.modal{width:100%;max-width:560px;max-height:90dvh;overflow:auto;background:#121b2f;border:1px solid var(--line);border-radius:22px;padding:24px}.modal-head{display:flex;align-items:start;gap:12px;justify-content:space-between}.modal h2{font-size:22px;margin:0 0 15px}.desc{white-space:pre-wrap;overflow-wrap:anywhere;max-height:170px;overflow:auto;background:#0c1426;padding:12px;border-radius:12px;font-size:13px;color:var(--muted);margin:14px 0}label{display:block;margin:16px 0 6px}.total{display:flex;justify-content:space-between;gap:10px;background:#352753;border-radius:12px;padding:16px;margin:20px 0}#submit{width:100%}#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);max-width:92vw;padding:14px 20px;background:#302549;color:white;border:1px solid #705d99;border-radius:12px;z-index:200;white-space:pre-wrap}[hidden]{display:none!important}footer{color:var(--muted);font-size:12px;margin-top:30px}.status{white-space:pre-wrap;margin-top:12px;font-size:13px}
+</style></head><body>
+<header><div class="header"><button class="logo" id="home">VibeBoost</button><div class="balance"><span class="muted">Баланс</span><span class="bal" id="balance">… ₽</span><button class="plus" id="openTopup" aria-label="Пополнить">+</button></div></div></header>
+<main class="wrap"><button class="button back" id="back" hidden>← Назад</button><h1 id="heading">Загружаем каталог…</h1><div class="tools"><input id="search" type="search" placeholder="Поиск…"><span class="muted" id="counter"></span></div><div class="grid" id="grid"></div><footer>Заказы отправляются поставщику после проверки и списания баланса. Пополнение подтверждает администратор.</footer></main>
+<div class="overlay" id="orderOverlay" hidden><section class="modal" role="dialog" aria-modal="true"><div class="modal-head"><h2>Покупка</h2><button class="button" id="closeOrder">×</button></div><strong id="serviceName"></strong><div class="muted" id="serviceMeta"></div><div class="desc" id="description"></div><form id="orderForm"><label for="link">Ссылка / username</label><input id="link" required maxlength="700"><label for="quantity">Количество <span class="muted" id="limits"></span></label><input id="quantity" type="number" step="1" required><div class="total"><span>К оплате</span><strong id="total">—</strong></div><button class="button primary" id="submit">Купить</button><div class="status" id="orderStatus"></div></form></section></div>
+<div class="overlay" id="topupOverlay" hidden><section class="modal" role="dialog" aria-modal="true"><div class="modal-head"><h2>Пополнение баланса</h2><button class="button" id="closeTopup">×</button></div><p class="muted">Выбери сумму. Это создаст запрос администратору; средства будут зачислены после проверки оплаты.</p><label for="topupAmount">Сумма, ₽ (от 10 до 100000)</label><input id="topupAmount" type="number" min="10" max="100000" value="100"><label for="topupMethod">Способ</label><select id="topupMethod" style="width:100%;padding:12px;background:#0c1426;color:white;border:1px solid var(--line);border-radius:12px"><option value="sbp">СБП / карта</option><option value="crypto">Криптовалюта</option><option value="other">Другой способ</option></select><button class="button primary" id="createTopup" style="width:100%;margin-top:16px">Запросить пополнение</button><div class="status" id="topupStatus"></div></section></div><div id="toast" hidden></div>
 <script>
 'use strict';
+const API='https://vibeboost-2.onrender.com';
+const ICONS={'Telegram':'telegram.svg','ВКонтакте':'vk.svg','Instagram':'instagram.svg','TikTok':'tiktok.svg','YouTube':'youtube.svg','Twitter X':'twitter.png','Одноклассники':'ok.svg','RuTube':'rutube.png','Twitch':'twitch.svg','Kick':'kick.png','MAX':'max.png','Wibes':'wibes.png'};
+const $=id=>document.getElementById(id), tg=window.Telegram?.WebApp;
+let services=[], network=null, category=null, selected=null, balance=0, busy=false, toastTimer;
+const money=n=>Number(n).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' ₽';
+function toast(s){$('toast').textContent=s;$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,4500)}
+function el(tag,text,cls){const x=document.createElement(tag);if(text!==undefined)x.textContent=text;if(cls)x.className=cls;return x}
 
-/* ============================================================
-   ОПТИМИЗИРОВАННЫЙ ЛЁГКИЙ ФОН НА CANVAS (БЕЗ ЛАГОВ)
-   DPR фиксирован на 1.0 (чтобы не грузить мобильный GPU),
-   3 мягких градиентных пятна + легкие частицы.
-   ============================================================ */
-(function bg(){
-  const canvas = document.getElementById('bgCanvas');
-  const ctx = canvas.getContext('2d', { alpha: false });
-  let W = 0, H = 0, raf = null, last = 0, t = 0, paused = false;
-
-  function makeSprite(r, g, b, size){
-    const c = document.createElement('canvas');
-    c.width = c.height = size;
-    const gx = c.getContext('2d');
-    const grad = gx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
-    grad.addColorStop(0, 'rgba(' + r + ',' + g + ',' + b + ',0.48)');
-    grad.addColorStop(0.4, 'rgba(' + r + ',' + g + ',' + b + ',0.2)');
-    grad.addColorStop(0.8, 'rgba(' + r + ',' + g + ',' + b + ',0.04)');
-    grad.addColorStop(1, 'rgba(' + r + ',' + g + ',' + b + ',0)');
-    gx.fillStyle = grad;
-    gx.fillRect(0, 0, size, size);
-    return c;
-  }
-
-  const blobs = [
-    { sprite: makeSprite(142, 98, 255, 200), bx: 0.2, by: 0.2, ax: 0.15, ay: 0.12, sx: 0.05, sy: 0.04, ph: 0, r: 0.55 },
-    { sprite: makeSprite(63, 224, 255, 200), bx: 0.8, by: 0.3, ax: 0.14, ay: 0.15, sx: 0.04, sy: 0.05, ph: 2.1, r: 0.48 },
-    { sprite: makeSprite(255, 75, 216, 200), bx: 0.4, by: 0.75, ax: 0.16, ay: 0.14, sx: 0.045, sy: 0.038, ph: 4.2, r: 0.45 }
-  ];
-
-  let particles = [];
-
-  function resize(){
-    W = window.innerWidth;
-    H = window.innerHeight;
-    canvas.width = W;
-    canvas.height = H;
-    const count = Math.min(22, Math.floor(W / 24));
-    particles = Array.from({ length: count }, () => ({
-      x: Math.random() * W,
-      y: Math.random() * H,
-      r: Math.random() * 1.5 + 0.6,
-      v: Math.random() * 7 + 4,
-      drift: Math.random() * 0.5 + 0.2,
-      a: Math.random() * 0.35 + 0.15,
-      ph: Math.random() * 6.28
-    }));
-  }
-
-  function frame(now){
-    if (!last) last = now;
-    let dt = (now - last) / 1000;
-    last = now;
-    if (dt > 0.05) dt = 0.05;
-    t += dt;
-
-    ctx.fillStyle = '#050711';
-    ctx.fillRect(0, 0, W, H);
-
-    ctx.globalCompositeOperation = 'lighter';
-    const minS = Math.min(W, H);
-
-    for (let i = 0; i < blobs.length; i++){
-      const b = blobs[i];
-      const x = (b.bx + Math.sin(t * b.sx + b.ph) * b.ax) * W;
-      const y = (b.by + Math.cos(t * b.sy + b.ph * 0.7) * b.ay) * H;
-      const r = b.r * minS * (1 + Math.sin(t * 0.1 + b.ph) * 0.1);
-      ctx.drawImage(b.sprite, x - r, y - r, r * 2, r * 2);
-    }
-
-    ctx.fillStyle = '#dfd8ff';
-    for (let i = 0; i < particles.length; i++){
-      const p = particles[i];
-      p.y -= p.v * dt;
-      p.x += Math.sin(t * p.drift + p.ph) * 0.3;
-      if (p.y < -10){ p.y = H + 10; p.x = Math.random() * W; }
-      ctx.globalAlpha = p.a;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r, 0, 6.28);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-    ctx.globalCompositeOperation = 'source-over';
-
-    if (!paused) raf = requestAnimationFrame(frame);
-  }
-
-  window.addEventListener('resize', () => { resize(); });
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden){ paused = true; if (raf) cancelAnimationFrame(raf); }
-    else { paused = false; last = 0; raf = requestAnimationFrame(frame); }
+async function api(path,payload){
+  const r=await fetch(API+path,{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(payload)
   });
-
-  resize();
-  raf = requestAnimationFrame(frame);
-})();
-
-/* ============================================================
-   ПРИЛОЖЕНИЕ: ЦЕНА ЗА 1 ШТ, ГЛОБАЛЬНЫЙ ПОИСК, КОДЫ ОШИБОК
-   ============================================================ */
-const API = 'https://vibeboost-2.onrender.com';
-const ICONS = {
-  'Telegram':'telegram.svg','ВКонтакте':'vk.svg','Instagram':'instagram.svg',
-  'TikTok':'tiktok.svg','YouTube':'youtube.svg','Twitter X':'twitter.png',
-  'Одноклассники':'ok.svg','RuTube':'rutube.png','Twitch':'twitch.svg',
-  'Kick':'kick.png','MAX':'max.png','Wibes':'wibes.png'
-};
-
-const $ = id => document.getElementById(id);
-const tg = window.Telegram?.WebApp;
-let services = [], network = null, category = null, selected = null, balance = 0, busy = false, toastTimer;
-
-// Форматирование цен: ВСЕГДА ЗА 1 ШТУКУ
-function formatUnitPrice(ratePer1000){
-  const unit = Number(ratePer1000) / 1000;
-  if (!isFinite(unit) || unit <= 0) return '— ₽';
-  if (unit >= 10){
-    return unit.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₽';
-  } else if (unit >= 1){
-    return unit.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 3 }) + ' ₽';
-  } else if (unit >= 0.01){
-    return unit.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 3 }) + ' ₽';
-  } else {
-    // микро-цены (например, 0.005)
-    return unit.toLocaleString('ru-RU', { minimumFractionDigits: 3, maximumFractionDigits: 4 }) + ' ₽';
+  const text=await r.text();
+  let d;
+  try {
+    d=JSON.parse(text);
+  } catch(e) {
+    throw Error(`HTTP ${r.status}. Ответ не JSON:\n${text.slice(0,400)}`);
   }
+  if(!r.ok||!d.ok) throw Error(d.error||`HTTP ${r.status}`);
+  return d;
 }
-
-// Форматирование общей суммы заказа
-const formatMoney = n => Number(n).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₽';
-
-function toast(msg){
-  const t = $('toast');
-  t.textContent = msg;
-  t.hidden = false;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.hidden = true; }, 4500);
-}
-
-function el(tag, text, cls){
-  const e = document.createElement(tag);
-  if (text !== undefined) e.textContent = text;
-  if (cls) e.className = cls;
-  return e;
-}
-
-function hideSplash(){
-  const s = $('splash');
-  if (s && !s.classList.contains('hide')) s.classList.add('hide');
-}
-setTimeout(hideSplash, 1400);
 
 function auth(){
-  if (tg?.initData && tg.initData.length > 0) return tg.initData;
-  if (location.hash && location.hash.length > 1){
-    const p = new URLSearchParams(location.hash.slice(1));
-    const h = p.get('tgWebAppData');
-    if (h) return h;
+  if(tg?.initData && tg.initData.length>0) return tg.initData;
+  if(location.hash && location.hash.length>1){
+    const p=new URLSearchParams(location.hash.substring(1));
+    const h=p.get('tgWebAppData');
+    if(h) return h;
+    if(location.hash.includes('hash=')&&location.hash.includes('auth_date=')) return location.hash.substring(1);
   }
   return '';
 }
 
-/* ============================================================
-   ОБРАБОТЧИК ОШИБОК С ВНУТРЕННИМИ КОДАМИ ДЛЯ АДМИНА
-   ============================================================ */
-function classifyError(err){
-  const text = (err && (err.message || String(err))) || '';
-  const lower = text.toLowerCase();
-
-  // 1. Недостаточно баланса
-  if (lower.includes('недостаточно средств') || lower.includes('insufficient') || lower.includes('402')){
-    return {
-      type: 'balance',
-      title: 'Недостаточно средств на балансе',
-      desc: 'Для совершения этой покупки не хватает средств. Пожалуйста, пополните баланс.',
-      code: null
-    };
-  }
-
-  // 2. Ошибка авторизации Telegram (initData)
-  if (lower.includes('initdata') || lower.includes('подпись') || lower.includes('auth_date') || lower.includes('403')){
-    return {
-      type: 'auth',
-      title: 'Ошибка авторизации сессии',
-      desc: 'Пожалуйста, закройте и снова откройте приложение через кнопку бота в Telegram.',
-      code: 'ERR-AUTH-403'
-    };
-  }
-
-  // 3. Google Таблица (Sheets / Secret / Lock)
-  if (lower.includes('sheets') || lower.includes('гугл таблица') || lower.includes('таблиц') || lower.includes('unauthorized') || lower.includes('sheet')){
-    return {
-      type: 'sheets',
-      title: 'Сервис данных временно недоступен',
-      desc: 'Произошла техническая ошибка базы данных. Передайте код администратору для устранения:',
-      code: 'ERR-GS-502'
-    };
-  }
-
-  // 4. Поставщик услуг (Twiboost)
-  if (lower.includes('поставщик') || lower.includes('twiboost') || lower.includes('provider') || lower.includes('отклонил')){
-    return {
-      type: 'provider',
-      title: 'Услуга временно недоступна у поставщика',
-      desc: 'Поставщик не смог принять заказ. Деньги возвращены на баланс. Сообщите код поддержке:',
-      code: 'ERR-PRV-503'
-    };
-  }
-
-  // 5. Некорректные параметры (ссылка, лимит)
-  if (lower.includes('количество') || lower.includes('ссылк') || lower.includes('каталог') || lower.includes('404')){
-    return {
-      type: 'validation',
-      title: 'Неверные данные заказа',
-      desc: text.replace(/Google Таблица.*?:/gi, '').trim(),
-      code: 'ERR-VAL-400'
-    };
-  }
-
-  // 6. Сеть / таймаут
-  if (lower.includes('failed to fetch') || lower.includes('network') || lower.includes('abort') || lower.includes('таймаут')){
-    return {
-      type: 'network',
-      title: 'Сбой интернет-соединения',
-      desc: 'Не удалось связаться с сервером. Проверьте интернет и повторите попытку.',
-      code: 'ERR-NET-504'
-    };
-  }
-
-  // 7. Общая серверная ошибка
-  return {
-    type: 'server',
-    title: 'Внутренняя ошибка сервиса',
-    desc: 'Произошел непредвиденный сбой. Сообщите этот код администратору:',
-    code: 'ERR-SRV-500'
-  };
-}
-
-async function api(path, payload){
-  const r = await fetch(API + path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  const text = await r.text();
-  let d;
-  try { d = JSON.parse(text); }
-  catch { throw Error('Сервер вернул некорректный ответ (код 500)'); }
-  if (!r.ok || !d.ok) throw Error(d.error || ('HTTP ' + r.status));
-  return d;
-}
-
 async function refreshBalance(){
-  const cached = localStorage.getItem('vb_bal');
-  if (cached !== null) $('balance').textContent = formatMoney(Number(cached));
-
-  const a = auth();
-  if (!a){
-    if (cached === null) $('balance').textContent = '0,00 ₽';
+  const initData=auth();
+  if(!initData){
+    $('balance').textContent='Не в Telegram';
+    toast('Внимание: Telegram не передал initData. Откройте через кнопку в боте.');
     return;
   }
-
-  try {
-    const d = await api('/api/user/info', { initData: a });
-    balance = Number(d.balance || 0);
-    $('balance').textContent = formatMoney(balance);
-    localStorage.setItem('vb_bal', String(balance));
-  } catch (e){
-    if (cached === null) $('balance').textContent = '0,00 ₽';
-    console.error('Баланс:', e);
+  try{
+    const d=await api('/api/user/info',{initData:initData});
+    balance=Number(d.balance||0);
+    $('balance').textContent=money(balance);
+  }catch(e){
+    $('balance').textContent='Ошибка';
+    toast('Ошибка баланса: '+e.message);
+    alert('Сервер вернул ошибку при получении баланса:\n\n'+e.message);
+    console.error(e);
   }
 }
 
-// Создание карточки услуги (цена везде ЗА 1 ШТУКУ)
-function createCard(title, sub, cb, net, unitPriceText, isSearchMatch){
-  const b = el('button', undefined, 'card');
-  b.type = 'button';
+function card(title,sub,cb,net,price){const b=el('button',undefined,'card');b.type='button';if(net){const i=el('span',net.slice(0,2).toUpperCase(),'icon'),file=ICONS[net];if(file){const im=new Image();im.alt='';im.onload=()=>i.replaceChildren(im);im.src='./'+file}b.append(i)}const info=el('span',undefined,'card-info');info.append(el('span',title,'title'),el('span',sub,'subtitle'));if(price)info.append(el('span',price,'price'));b.append(info,el('span','›'));b.onclick=cb;return b}
+function render(){$('back').hidden=!network;$('heading').textContent=!network?'Выберите соцсеть':(category||network+': категории');const q=$('search').value.trim().toLowerCase(),g=$('grid');g.replaceChildren();if(!network){for(const n of [...new Set(services.map(s=>s.network))].sort((a,b)=>a.localeCompare(b,'ru')).filter(n=>n.toLowerCase().includes(q))){const a=services.filter(s=>s.network===n);g.append(card(n,`Услуг: ${a.length}`,()=>{network=n;category=null;$('search').value='';render()},n))}}else if(!category){const a=services.filter(s=>s.network===network),cats=[...new Set(a.map(s=>s.category))].sort((x,y)=>x.localeCompare(y,'ru'));for(const c of cats.filter(x=>x.toLowerCase().includes(q)))g.append(card(c,`Услуг: ${a.filter(s=>s.category===c).length}`,()=>{category=c;$('search').value='';render()}))}else{for(const s of services.filter(s=>s.network===network&&s.category===category&&(s.name+' '+s.service).toLowerCase().includes(q)))g.append(card(s.name,`ID ${s.service} · ${s.min}–${s.max}`,()=>openOrder(s),null,money(s.rate)+' / 1000'))}const count=g.children.length;$('counter').textContent=`Показано: ${count}`;if(!count)g.append(el('p','Ничего не найдено','empty'))}
+function openOrder(s){selected=s;$('serviceName').textContent=s.name;$('serviceMeta').textContent=`${s.network} · ${s.category} · ID ${s.service}`;$('description').textContent=s.description||'Описание не предоставлено';$('link').value='';$('quantity').min=s.min;$('quantity').max=s.max;$('quantity').value=s.min;$('limits').textContent=`(${s.min}–${s.max})`;$('orderStatus').textContent='';price();$('orderOverlay').hidden=false}
+function price(){if(!selected)return;const q=Number($('quantity').value),valid=/^\d+$/.test($('quantity').value)&&Number.isSafeInteger(q)&&q>=Number(selected.min)&&q<=Number(selected.max);$('quantity').setCustomValidity(valid?'':`Количество от ${selected.min} до ${selected.max}`);$('total').textContent=valid?money(Number(selected.rate)*q/1000):'—'}
 
-  if (net){
-    const i = el('span', net.slice(0, 2).toUpperCase(), 'card-icon');
-    const f = ICONS[net];
-    if (f){
-      const im = new Image();
-      im.alt = '';
-      im.onload = () => i.replaceChildren(im);
-      im.src = './' + f;
-    }
-    b.append(i);
-  }
-
-  const info = el('span', undefined, 'card-info');
-  info.append(el('span', title, 'card-title'));
-  if (sub) info.append(el('span', sub, 'card-sub'));
-  b.append(info);
-
-  if (unitPriceText){
-    const pb = el('span', undefined, 'card-price-block');
-    pb.append(el('span', unitPriceText, 'card-price'));
-    pb.append(el('span', 'за 1 шт.', 'card-unit'));
-    b.append(pb);
-  }
-
-  b.append(el('span', '›', 'card-arrow'));
-  b.onclick = cb;
-  return b;
-}
-
-/* ============================================================
-   УМНЫЙ ПОИСК ПО ВСЕМУ СПИСКУ УСЛУГ (БЕЗ ОГРАНИЧЕНИЙ ЭКРАНА)
-   ============================================================ */
-function searchServices(query){
-  const q = query.trim().toLowerCase();
-  const words = q.split(/\s+/).filter(Boolean);
-  if (!words.length) return [];
-
-  return services.filter(s => {
-    const hay = ((s.name || '') + ' ' + (s.network || '') + ' ' + (s.category || '') + ' ' + (s.service || '')).toLowerCase();
-    // Все слова из запроса должны присутствовать
-    return words.every(w => hay.includes(w));
-  });
-}
-
-function render(){
-  const query = $('search').value.trim();
-  const g = $('grid');
-  const clearBtn = $('searchClear');
-  g.replaceChildren();
-
-  clearBtn.classList.toggle('show', query.length > 0);
-
-  // ЕСЛИ В ПОИСКЕ ЧТО-ТО ВВЕДЕНО — ИЩЕМ ПО ВСЕМУ СПИСКУ УСЛУГ
-  if (query.length > 0){
-    $('back').hidden = true;
-    $('sectionTitleText').textContent = 'Найдено по запросу «' + query + '»';
-
-    const results = searchServices(query);
-    $('counter').textContent = results.length + ' шт.';
-
-    if (!results.length){
-      g.append(el('p', 'По вашему запросу ничего не найдено. Попробуйте другое слово (например: лайки, тг, просмотры).', 'empty-state'));
-      return;
-    }
-
-    for (let i = 0; i < results.length; i++){
-      const s = results[i];
-      const sub = s.network + ' · ' + s.category + ' · ID ' + s.service;
-      const unitP = formatUnitPrice(s.rate);
-      g.append(createCard(s.name, sub, () => openOrder(s), s.network, unitP, true));
-    }
-    return;
-  }
-
-  // СТАНДАРТНАЯ НАВИГАЦИЯ (КОГДА ПОИСК ПУСТ)
-  $('back').hidden = !network;
-
-  if (!network){
-    $('sectionTitleText').textContent = 'Выберите соцсеть';
-    const nets = [...new Set(services.map(s => s.network))].sort((a, b) => a.localeCompare(b, 'ru'));
-    $('counter').textContent = nets.length + ' площадок';
-
-    for (let i = 0; i < nets.length; i++){
-      const n = nets[i];
-      const count = services.filter(s => s.network === n).length;
-      g.append(createCard(n, 'Доступно услуг: ' + count, () => {
-        network = n; category = null; render();
-      }, n, null, false));
-    }
-  } else if (!category){
-    $('sectionTitleText').textContent = network + ' — категории';
-    const filtered = services.filter(s => s.network === network);
-    const cats = [...new Set(filtered.map(s => s.category))].sort((a, b) => a.localeCompare(b, 'ru'));
-    $('counter').textContent = cats.length + ' категорий';
-
-    for (let i = 0; i < cats.length; i++){
-      const c = cats[i];
-      const count = filtered.filter(s => s.category === c).length;
-      g.append(createCard(c, 'Услуг: ' + count, () => {
-        category = c; render();
-      }, null, null, false));
-    }
-  } else {
-    $('sectionTitleText').textContent = category;
-    const list = services.filter(s => s.network === network && s.category === category);
-    $('counter').textContent = list.length + ' услуг';
-
-    for (let i = 0; i < list.length; i++){
-      const s = list[i];
-      const unitP = formatUnitPrice(s.rate);
-      g.append(createCard(
-        s.name,
-        'ID ' + s.service + ' · от ' + s.min + ' до ' + s.max + ' шт.',
-        () => openOrder(s),
-        null,
-        unitP,
-        false
-      ));
-    }
-  }
-
-  if (!g.children.length) g.append(el('p', 'Услуги не найдены', 'empty-state'));
-}
-
-function openOrder(s){
-  selected = s;
-  $('serviceName').textContent = s.name;
-  $('serviceMeta').textContent = s.network + ' · ' + s.category + ' · ID ' + s.service;
-  $('description').textContent = s.description || 'Описание услуги отсутствует.';
-  $('link').value = '';
-  $('quantity').min = s.min;
-  $('quantity').max = s.max;
-  $('quantity').value = s.min;
-  $('limits').textContent = '(от ' + s.min + ' до ' + s.max + ')';
-
-  // Показываем цену за 1 шт. прямо в модалке
-  $('unitPriceLabel').textContent = formatUnitPrice(s.rate);
-
-  // Скрываем блок ошибок
-  hideOrderError();
-
-  const btn = $('submit');
-  btn.disabled = false;
-  btn.innerHTML = '<span>Подтвердить заказ</span>';
-
-  updatePrice();
-  $('orderOverlay').hidden = false;
-}
-
-function updatePrice(){
-  if (!selected) return;
-  const raw = $('quantity').value;
-  const q = Number(raw);
-  const valid = /^\d+$/.test(raw) && Number.isSafeInteger(q) && q >= Number(selected.min) && q <= Number(selected.max);
-  $('quantity').setCustomValidity(valid ? '' : ('Введите число от ' + selected.min + ' до ' + selected.max));
-  $('total').textContent = valid ? formatMoney(Number(selected.rate) * q / 1000) : '—';
-}
-
-function showOrderError(err){
-  const box = $('orderErrBox');
-  const info = classifyError(err);
-
-  $('errTitle').textContent = info.title;
-  $('errDesc').textContent = info.desc;
-
-  const badge = $('errCodeBadge');
-  if (info.code){
-    badge.innerHTML = '<span class="err-code">' + info.code + '</span>';
-  } else {
-    badge.innerHTML = '';
-  }
-
-  // Если не хватает баланса — предлагаем кнопку мгновенного пополнения
-  const topupWrap = $('errTopupBtnWrap');
-  topupWrap.hidden = (info.type !== 'balance');
-
-  box.classList.add('show');
-}
-
-function hideOrderError(){
-  $('orderErrBox').classList.remove('show');
-}
-
-// Нажатие "Пополнить баланс" прямо из ошибки
-$('errTopupBtn').onclick = () => {
-  $('orderOverlay').hidden = true;
-  $('topupOverlay').hidden = false;
-};
-
-// Отправка формы заказа с защитой от повторного клика
-$('orderForm').onsubmit = async e => {
+$('orderForm').onsubmit=async e=>{
   e.preventDefault();
-  if (busy || !selected) return;
-  updatePrice();
-  if (!e.currentTarget.reportValidity()) return;
-
-  const a = auth();
-  if (!a){
-    showOrderError(new Error('initData отсутствует. Откройте через Telegram.'));
+  if(busy||!selected)return;
+  price();
+  if(!e.currentTarget.reportValidity())return;
+  const initData=auth();
+  if(!initData){
+    $('orderStatus').textContent='Открой Mini App через Telegram.';
     return;
   }
-
-  busy = true;
-  hideOrderError();
-
-  const btn = $('submit');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spin-wrap"><i class="spinner"></i>Оформляем заказ…</span>';
-
-  try {
-    const d = await api('/api/order', {
-      initData: a,
-      order: {
-        service: selected.service,
-        quantity: Number($('quantity').value),
-        link: $('link').value.trim()
+  busy=true;
+  $('submit').disabled=true;
+  $('orderStatus').textContent='Проверяем баланс и отправляем заказ…';
+  try{
+    const d=await api('/api/order',{
+      initData:initData,
+      order:{
+        service:selected.service,
+        quantity:Number($('quantity').value),
+        link:$('link').value.trim()
       }
     });
-
-    const newBal = Number(d.new_balance);
-    $('balance').textContent = formatMoney(newBal);
-    localStorage.setItem('vb_bal', String(newBal));
-
-    toast('✅ Заказ успешно оформлен!');
-    btn.innerHTML = '<span>Заказ принят!</span>';
-    btn.disabled = true;
-
-    setTimeout(() => { $('orderOverlay').hidden = true; }, 1800);
-  } catch (err){
-    showOrderError(err);
-    btn.disabled = false;
-    btn.innerHTML = '<span>Повторить попытку</span>';
-  } finally {
-    busy = false;
+    balance=Number(d.new_balance);
+    $('balance').textContent=money(balance);
+    $('orderStatus').textContent=`Заказ принят поставщиком. ID: ${d.provider_id}. Остаток: ${money(balance)}`;
+    toast('Заказ оформлен');
+    setTimeout(()=>{$('orderOverlay').hidden=true},2500);
+  }catch(err){
+    $('orderStatus').textContent='Ошибка: '+err.message;
+  }finally{
+    busy=false;
+    $('submit').disabled=false;
   }
 };
 
-$('quantity').oninput = updatePrice;
-$('closeOrder').onclick = () => { if (!busy) $('orderOverlay').hidden = true; };
-$('openTopup').onclick = () => { $('topupOverlay').hidden = false; };
-$('closeTopup').onclick = () => { $('topupOverlay').hidden = true; };
+$('quantity').oninput=price;
+$('closeOrder').onclick=()=>$('orderOverlay').hidden=true;
+$('openTopup').onclick=()=>$('topupOverlay').hidden=false;
+$('closeTopup').onclick=()=>$('topupOverlay').hidden=true;
 
-// Поиск в реальном времени + очистка
-$('search').oninput = () => { render(); };
-$('searchClear').onclick = () => {
-  $('search').value = '';
-  $('search').focus();
-  render();
-};
-
-$('home').onclick = () => {
-  network = null; category = null; $('search').value = ''; render();
-};
-$('back').onclick = () => {
-  if (category) category = null; else network = null;
-  render();
-};
-
-// Запрос на пополнение
-$('createTopup').onclick = async () => {
-  const btn = $('createTopup');
-  const errBox = $('topupErrBox');
-  errBox.classList.remove('show');
-
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spin-wrap"><i class="spinner"></i>Отправляем…</span>';
-  try {
-    const d = await api('/api/topup', {
-      initData: auth(),
-      amount: Number($('topupAmount').value),
-      method: $('topupMethod').value
+$('createTopup').onclick=async()=>{
+  try{
+    const initData=auth();
+    if(!initData)throw Error('Открой Mini App через Telegram');
+    const d=await api('/api/topup',{
+      initData:initData,
+      amount:Number($('topupAmount').value),
+      method:$('topupMethod').value
     });
-    toast('✅ Запрос отправлен администратору');
-    $('topupErrTitle').textContent = 'Запрос успешно отправлен';
-    $('topupErrTitle').style.color = 'var(--green)';
-    $('topupErrDesc').textContent = d.message || 'Ожидайте проверки платежа.';
-    errBox.classList.add('show');
-    setTimeout(() => { $('topupOverlay').hidden = true; }, 2200);
-  } catch (e){
-    const info = classifyError(e);
-    $('topupErrTitle').textContent = info.title;
-    $('topupErrTitle').style.color = '#ff839a';
-    $('topupErrDesc').textContent = (info.code ? info.code + ': ' : '') + info.desc;
-    errBox.classList.add('show');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = '<span>Создать запрос</span>';
+    $('topupStatus').textContent=d.message;
+    toast('Запрос отправлен администратору');
+  }catch(e){
+    $('topupStatus').textContent='Ошибка: '+e.message;
   }
 };
 
-try { tg?.ready(); tg?.expand(); } catch (e) { console.error(e); }
+$('search').oninput=render;
+$('home').onclick=()=>{network=null;category=null;$('search').value='';render()};
+$('back').onclick=()=>{if(category)category=null;else network=null;$('search').value='';render()};
 
-// Загрузка услуг
-(async () => {
-  try {
-    const r = await fetch('./services.json?v=' + Date.now());
-    if (!r.ok) throw Error('Каталог услуг временно недоступен');
-    const data = await r.json();
-    if (!Array.isArray(data) || !data.length) throw Error('Каталог пуст');
+tg?.ready();
+tg?.expand();
+refreshBalance();
 
-    services = data.map(s => ({
-      ...s,
-      network: String(s.network || 'Без сети'),
-      category: String(s.category || 'Прочее'),
-      name: String(s.name || 'Услуга')
-    }));
-
+(async()=>{
+  try{
+    const r=await fetch('./services.json?v='+Date.now());
+    if(!r.ok)throw Error('services.json HTTP '+r.status);
+    const d=await r.json();
+    if(!Array.isArray(d)||!d.length)throw Error('services.json не массив или пуст');
+    services=d.map(s=>({...s,network:String(s.network||'Без сети'),category:String(s.category||'Прочее'),name:String(s.name||'Услуга')}));
     render();
-  } catch (e){
-    $('grid').append(el('p', 'Не удалось загрузить каталог. Пожалуйста, обновите страницу.', 'empty-state'));
-    toast('Ошибка загрузки: ERR-CAT-404');
-  } finally {
-    hideSplash();
-    refreshBalance();
+  }catch(e){
+    $('heading').textContent='Ошибка загрузки каталога';
+    $('grid').append(el('p',e.message,'empty'));
   }
 })();
-</script>
-</body>
-</html>
+</script></body></html>
