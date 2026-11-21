@@ -94,7 +94,7 @@ def get_service(service_id: str) -> Optional[dict]:
     return CATALOG_BY_ID.get(str(service_id))
 
 
-# Реестр премиум-эмодзи площадок для кнопок (icon_custom_emoji_id)
+# Реестр премиум-эмодзи площадок для кнопок и сообщений
 PREMIUM_EMOJI_IDS = {
     "Авито": "5206315603379373105",
     "Дзен": "5359312848247857963",
@@ -142,16 +142,50 @@ MENU_EMOJI_IDS = {
     "obnova": "6221916841640464816",
 }
 
-# Безопасные текстовые эмодзи (для сообщений бота)
+# Кастомные премиум-эмодзи цифр и знака рубля
+EMOJI_DIGITS = {
+    '0': '5778186427212764109',
+    '1': '5780836954610340827',
+    '2': '5780699296613537236',
+    '3': '5780460243028809072',
+    '4': '5780521107010359540',
+    '5': '5780904209503229339',
+    '6': '5778265768143623066',
+    '7': '5778432284025689160',
+    '8': '5780483886823773841',
+    '9': '5780426381506646173',
+    'rub': '5780627184112638724'
+}
+
+def format_balance_premium(amount: int | float) -> str:
+    """Преобразует число баланса в кастомные премиум-эмодзи со значком рубля"""
+    dec = Decimal(str(amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    amount_str = f"{dec:,.2f}".replace(",", " ")
+    result = []
+    
+    for char in amount_str:
+        if char in EMOJI_DIGITS:
+            emoji_id = EMOJI_DIGITS[char]
+            result.append(f'<tg-emoji emoji-id="{emoji_id}">{char}</tg-emoji>')
+        else:
+            result.append(char)
+            
+    rub_id = EMOJI_DIGITS['rub']
+    result.append(f' <tg-emoji emoji-id="{rub_id}">₽</tg-emoji>')
+    return "".join(result)
+
+# Премиум эмодзи для текста сообщений (вместо обычных безопасных)
 def tg_icon(name: str) -> str:
-    net_lower = name.lower()
-    if "telegram" in net_lower: return "✈️"
-    if "vk" in net_lower or "вконтакте" in net_lower: return "🟦"
-    if "youtube" in net_lower: return "▶️"
-    if "instagram" in net_lower: return "📸"
-    if "tiktok" in net_lower: return "🎵"
-    if "twitter" in net_lower: return "🐦"
-    if "twitch" in net_lower: return "🟣"
+    """Превращает название соцсети в премиум-эмодзи Telegram"""
+    name_str = str(name).strip()
+    emoji_id = PREMIUM_EMOJI_IDS.get(name_str)
+    if not emoji_id:
+        for k, v in PREMIUM_EMOJI_IDS.items():
+            if k.casefold() == name_str.casefold() or k.casefold() in name_str.casefold():
+                emoji_id = v
+                break
+    if emoji_id:
+        return f'<tg-emoji emoji-id="{emoji_id}">🌐</tg-emoji>'
     return "🌐"
 
 
@@ -309,7 +343,7 @@ async def execute_provider_order(user_id: int, item: dict, link: str, quantity: 
         f"📊 <b>Количество:</b> <code>{quantity} шт.</code>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         f"💰 <b>Списано с баланса:</b> <code>{format_money(charge_amount)}</code>\n"
-        f"💳 <b>Остаток на балансе:</b> <b>{format_money(new_balance)}</b>\n"
+        f"💳 <b>Остаток на балансе:</b> <b>{format_balance_premium(new_balance)}</b>\n"
         f"🧾 <b>Номер заказа:</b> <code>#{provider_order_id}</code>\n\n"
         "<i>Заказ запущен в автоматическом режиме!</i>"
     )
@@ -416,7 +450,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
     user = message.from_user
     log.info("Received /start from %s (@%s)", user.id, user.username)
     text = (
-        f"👋 <b>Добро пожаловать в VibeBoost, {escape(user.first_name)}!</b>\n"
+        f"👋 <b>Добро пожаловать в HEŪPO BOOST, {escape(user.first_name)}!</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Автоматическое продвижение и накрутка в топ для всех социальных сетей.\n\n"
         "Выбери действие ниже:"
@@ -428,7 +462,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
 async def cb_main_menu(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
     text = (
-        f"👋 <b>Главное меню VibeBoost</b>\n"
+        "👋 <b>Главное меню HEŪPO BOOST</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Автоматическое продвижение и накрутка в топ для всех социальных сетей.\n\n"
         "Выбери действие ниже:"
@@ -461,15 +495,17 @@ async def show_profile(chat_id: int, user: types.User, message_to_edit: types.Me
         balance = 0.0
 
     username = f"@{user.username}" if user.username else "не указан"
+    balance_view = format_balance_premium(balance)
+
     text = (
-        "👤 <b>Ваш личный профиль VibeBoost</b>\n"
+        '<tg-emoji emoji-id="5190564364872101511">👤</tg-emoji> Ваш личный профиль\n'
         "━━━━━━━━━━━━━━━━━━━━\n"
-        f"🔹 <b>Имя:</b> {escape(user.full_name)}\n"
-        f"🔹 <b>Username:</b> {escape(username)}\n"
-        f"🆔 <b>Telegram ID:</b> <code>{user.id}</code>\n\n"
-        f"💳 <b>Текущий баланс:</b> <b>{format_money(balance)}</b>\n"
+        f'<tg-emoji emoji-id="5192702953642830208">🔹</tg-emoji> Имя: {escape(user.full_name)}\n'
+        f'<tg-emoji emoji-id="5192798009859027969">🔹</tg-emoji> Username: {escape(username)}\n'
+        f'<tg-emoji emoji-id="5291913773307667021">🆔</tg-emoji> Telegram ID: <code>{user.id}</code>\n\n'
+        f'<tg-emoji emoji-id="5456343516743483864">💳</tg-emoji> Текущий баланс: {balance_view}\n'
         "━━━━━━━━━━━━━━━━━━━━\n"
-        "<i>Пополняйте баланс и запускайте заказы в 1 клик!</i>"
+        "Пополняйте баланс и запускайте заказы в 1 клик!"
     )
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [
@@ -757,7 +793,7 @@ async def show_order_confirm(message: types.Message, state: FSMContext, item: di
     text += (
         "━━━━━━━━━━━━━━━━━━━━\n"
         f"💰 <b>К списанию:</b> <b>{format_money(cost)}</b>\n"
-        f"💳 <b>Ваш баланс:</b> {format_money(current_balance)}\n"
+        f"💳 <b>Ваш баланс:</b> {format_balance_premium(current_balance)}\n"
     )
 
     if current_balance < cost:
@@ -814,7 +850,7 @@ async def cb_order_confirm(callback: types.CallbackQuery, state: FSMContext):
             f"{icon} <b>Услуга:</b> {escape(str(item.get('name')))}\n"
             f"📊 <b>Количество:</b> <code>{quantity} шт.</code>\n"
             f"💰 <b>Списано:</b> <code>{format_money(res['charge'])}</code>\n"
-            f"💳 <b>Остаток на балансе:</b> <b>{format_money(res['new_balance'])}</b>",
+            f"💳 <b>Остаток на балансе:</b> <b>{format_balance_premium(res['new_balance'])}</b>",
             reply_markup=main_menu_kb(),
             parse_mode="HTML"
         )
@@ -892,7 +928,7 @@ async def cb_support_start(callback: types.CallbackQuery, state: FSMContext):
         [make_btn("Отмена", callback_data="bot:menu", emoji_id=MENU_EMOJI_IDS.get("menu"))]
     ])
     await callback.message.edit_text(
-        "💬 <b>Служба поддержки VibeBoost</b>\n"
+        "💬 <b>Служба поддержки HEŪPO BOOST</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Пожалуйста, напишите ваш вопрос или опишите возникшую проблему одним сообщением.\n\n"
         "<i>Для отмены нажмите кнопку ниже или отправьте /cancel</i>",
@@ -909,7 +945,7 @@ async def cmd_support(message: types.Message, state: FSMContext):
         [make_btn("Отмена", callback_data="bot:menu", emoji_id=MENU_EMOJI_IDS.get("menu"))]
     ])
     await message.answer(
-        "💬 <b>Служба поддержки VibeBoost</b>\n"
+        "💬 <b>Служба поддержки HEŪPO BOOST</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Пожалуйста, напишите ваш вопрос или опишите возникшую проблему одним сообщением.\n\n"
         "<i>Для отмены отправьте /cancel</i>",
@@ -969,9 +1005,9 @@ async def cmd_addbalance(message: types.Message):
         amt = round(float(parts[2].replace(",", ".")), 2)
         res = await sheets("credit", user_id=target_id, amount=amt, comment="Пополнение администратором")
         new_bal = float(res.get("balance", 0))
-        await message.reply(f"✅ Баланс <code>{target_id}</code> пополнен на <b>{format_money(amt)}</b>. Текущий баланс: <b>{format_money(new_bal)}</b>", parse_mode="HTML")
+        await message.reply(f"✅ Баланс <code>{target_id}</code> пополнен на <b>{format_money(amt)}</b>. Текущий баланс: {format_balance_premium(new_bal)}", parse_mode="HTML")
         try:
-            await bot.send_message(target_id, f"💎 <b>Ваш баланс пополнен на {format_money(amt)}!</b>\nТекущий баланс: <b>{format_money(new_bal)}</b>", parse_mode="HTML")
+            await bot.send_message(target_id, f"💎 <b>Ваш баланс пополнен на {format_money(amt)}!</b>\nТекущий баланс: {format_balance_premium(new_bal)}", parse_mode="HTML")
         except Exception:
             pass
     except Exception as exc:
