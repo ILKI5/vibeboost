@@ -16,6 +16,7 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
+from aiogram.exceptions import TelegramRetryAfter
 from aiogram.types import (
     InlineKeyboardMarkup,
     WebAppInfo,
@@ -44,17 +45,16 @@ dp = Dispatcher()
 http: ClientSession | None = None
 
 # =====================================================================
-# IN-MEMORY КЭШ КАТАЛОГА (ОТВЕТ В ПАМЯТИ ЗА < 1 МС)
+# IN-MEMORY КЭШ КАТАЛОГА (МГНОВЕННЫЙ ОТВЕТ В RAM)
 # =====================================================================
 CATALOG_BY_ID: Dict[str, dict] = {}
 NETWORKS_LIST: List[tuple[str, int]] = []
 SERVICES_BY_NET: Dict[str, List[dict]] = {}
 
 def init_catalog_cache():
-    """Загружает и индексирует каталог в память один раз при старте."""
     global CATALOG_BY_ID, NETWORKS_LIST, SERVICES_BY_NET
     if not CATALOG_PATH.exists():
-        log.warning("Файл каталога %s не найден при инициализации!", CATALOG_PATH)
+        log.warning("Файл каталога %s не найден!", CATALOG_PATH)
         return
 
     try:
@@ -84,9 +84,9 @@ def init_catalog_cache():
         CATALOG_BY_ID = cat_by_id
         NETWORKS_LIST = net_list
         SERVICES_BY_NET = by_net
-        log.info("Каталог успешно загружен в RAM: %d услуг, %d соцсетей.", len(cat_by_id), len(net_list))
+        log.info("Каталог загружен в RAM: %d услуг, %d соцсетей.", len(cat_by_id), len(net_list))
     except Exception as exc:
-        log.exception("Ошибка инициализации каталога: %s", exc)
+        log.exception("Ошибка загрузки каталога: %s", exc)
 
 init_catalog_cache()
 
@@ -141,7 +141,7 @@ MENU_EMOJI_IDS = {
     "support": "6030400221232501136",
 }
 
-# Безопасные текстовые эмодзи (для сообщений бота)
+# Безопасные текстовые эмодзи (для сообщений)
 def tg_icon(name: str) -> str:
     net_lower = name.lower()
     if "telegram" in net_lower: return "✈️"
@@ -344,12 +344,14 @@ def main_menu_kb():
         [
             make_btn("Пополнить баланс", callback_data="bot:topup", emoji_id=MENU_EMOJI_IDS.get("topup")),
             make_btn("Поддержка", callback_data="bot:support", emoji_id=MENU_EMOJI_IDS.get("support")),
+        ],
+        [
+            make_btn("Mini App", web_app=WebAppInfo(url=WEBAPP_ORIGIN)),
         ]
     ])
 
 
 def networks_kb():
-    """Сетка соцсетей СТРОГО В ДВА СТОЛБЦА (готовые данные из RAM)."""
     buttons = []
     row = []
     for index, (net, count) in enumerate(NETWORKS_LIST):
@@ -370,7 +372,6 @@ def networks_kb():
 
 
 def services_by_network_kb(net_idx: int, page: int = 0):
-    """Список услуг без повторного парсинга файла."""
     if not NETWORKS_LIST:
         return "Прочее", [], 1, 0, InlineKeyboardMarkup(inline_keyboard=[])
 
@@ -415,7 +416,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
     user = message.from_user
     log.info("Received /start from %s (@%s)", user.id, user.username)
     text = (
-        f"👋 <b>Добро пожаловать в HEUPO BOOST, {escape(user.first_name)}!</b>\n"
+        f"👋 <b>Добро пожаловать в VibeBoost, {escape(user.first_name)}!</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Автоматическое продвижение и накрутка в топ для всех социальных сетей.\n\n"
         "Выбери действие ниже:"
@@ -427,7 +428,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
 async def cb_main_menu(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
     text = (
-        f"👋 <b>Главное меню HEUPO BOOST</b>\n"
+        f"👋 <b>Главное меню VibeBoost</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Автоматическое продвижение и накрутка в топ для всех социальных сетей.\n\n"
         "Выбери действие ниже:"
@@ -456,36 +457,20 @@ async def show_profile(chat_id: int, user: types.User, message_to_edit: types.Me
     try:
         prof = await sheets("get_user", user_id=user.id, username=user.username or "", full_name=user.full_name or "")
         balance = float(prof.get("balance", 0))
-    except Exception as exc:
-        log.warning("Ошибка получения баланса: %s", exc)
+    except Exception:
         balance = 0.0
 
     username = f"@{user.username}" if user.username else "не указан"
-
-    # Шаблон с кастомными премиум-эмодзи
-    text_custom = (
-        '<tg-emoji id="5190564364872101511">👤</tg-emoji> <b>Ваш личный профиль</b>\n'
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        f'<tg-emoji id="5192702953642830208">👤</tg-emoji> <b>Имя:</b> {escape(user.full_name)}\n'
-        f'<tg-emoji id="5192798009859027969">💬</tg-emoji> <b>Username:</b> {escape(username)}\n'
-        f'<tg-emoji id="5291913773307667021">🆔</tg-emoji> <b>Telegram ID:</b> <code>{user.id}</code>\n\n'
-        f'<tg-emoji id="5456343516743483864">💳</tg-emoji> <b>Текущий баланс:</b> <b>{format_money(balance)}</b>\n'
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "<i>Пополняйте баланс и запускайте заказы в 1 клик!</i>"
-    )
-
-    # Резервный шаблон на случай, если Telegram запретит боту теги <tg-emoji> без подписки Stars
-    text_fallback = (
-        "👤 <b>Ваш личный профиль</b>\n"
+    text = (
+        "👤 <b>Ваш личный профиль VibeBoost</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         f"🔹 <b>Имя:</b> {escape(user.full_name)}\n"
-        f"💬 <b>Username:</b> {escape(username)}\n"
+        f"🔹 <b>Username:</b> {escape(username)}\n"
         f"🆔 <b>Telegram ID:</b> <code>{user.id}</code>\n\n"
         f"💳 <b>Текущий баланс:</b> <b>{format_money(balance)}</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "<i>Пополняйте баланс и запускайте заказы в 1 клик!</i>"
     )
-
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [
             make_btn("Пополнить баланс", callback_data="bot:topup", emoji_id=MENU_EMOJI_IDS.get("topup")),
@@ -499,23 +484,13 @@ async def show_profile(chat_id: int, user: types.User, message_to_edit: types.Me
             make_btn("Меню", callback_data="bot:menu", emoji_id=MENU_EMOJI_IDS.get("menu")),
         ]
     ])
-
-    for current_text in (text_custom, text_fallback):
+    if message_to_edit:
         try:
-            if message_to_edit:
-                await message_to_edit.edit_text(current_text, reply_markup=kb, parse_mode="HTML")
-            else:
-                await bot.send_message(chat_id, current_text, reply_markup=kb, parse_mode="HTML")
+            await message_to_edit.edit_text(text, reply_markup=kb, parse_mode="HTML")
             return
-        except Exception as e:
-            log.warning("Не удалось отправить профиль с текущим форматом (%s), пробуем фоллбэк...", e)
-            if current_text == text_fallback and message_to_edit:
-                # Если редактирование не прошло, пробуем отправить новым сообщением
-                try:
-                    await bot.send_message(chat_id, text_fallback, reply_markup=kb, parse_mode="HTML")
-                    return
-                except Exception as final_exc:
-                    log.error("Критическая ошибка отправки профиля: %s", final_exc)
+        except Exception:
+            pass
+    await bot.send_message(chat_id, text, reply_markup=kb, parse_mode="HTML")
 
 
 @dp.message(Command("catalog", "каталог", "услуги"))
@@ -531,7 +506,6 @@ async def cb_cat_home(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-# Переход при клике на соц.сеть
 @dp.callback_query(F.data.startswith("net:"))
 async def cb_choose_network(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
@@ -917,7 +891,7 @@ async def cb_support_start(callback: types.CallbackQuery, state: FSMContext):
         [make_btn("Отмена", callback_data="bot:menu", emoji_id=MENU_EMOJI_IDS.get("menu"))]
     ])
     await callback.message.edit_text(
-        "💬 <b>Служба поддержки HEUPO BOOST</b>\n"
+        "💬 <b>Служба поддержки VibeBoost</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Пожалуйста, напишите ваш вопрос или опишите возникшую проблему одним сообщением.\n\n"
         "<i>Для отмены нажмите кнопку ниже или отправьте /cancel</i>",
@@ -934,7 +908,7 @@ async def cmd_support(message: types.Message, state: FSMContext):
         [make_btn("Отмена", callback_data="bot:menu", emoji_id=MENU_EMOJI_IDS.get("menu"))]
     ])
     await message.answer(
-        "💬 <b>Служба поддержки HEUPO BOOST</b>\n"
+        "💬 <b>Служба поддержки VibeBoost</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Пожалуйста, напишите ваш вопрос или опишите возникшую проблему одним сообщением.\n\n"
         "<i>Для отмены отправьте /cancel</i>",
@@ -1020,7 +994,6 @@ async def cmd_send(message: types.Message):
 
 @dp.message(Command("reload"))
 async def cmd_reload_catalog(message: types.Message):
-    """Команда для админа: перезагрузить каталог из services.json без перезапуска сервера."""
     if message.from_user.id != ADMIN_CHAT_ID:
         return
     init_catalog_cache()
@@ -1100,11 +1073,37 @@ async def topup_request(request):
         return web.json_response({"ok": False, "error": str(exc)}, status=400, headers=cors_headers())
 
 
+# Фоновый запуск бота (не блокирует порт веб-сервера)
+async def start_bot_polling():
+    # Пытаемся удалить вебхук, мягко обрабатывая TelegramRetryAfter
+    for attempt in range(3):
+        try:
+            await bot.delete_webhook(drop_pending_updates=True)
+            log.info("Telegram webhook успешно очищен.")
+            break
+        except TelegramRetryAfter as e:
+            wait_time = min(e.retry_after, 35)
+            log.warning("Telegram FloodWait на delete_webhook: ждём %d сек...", wait_time)
+            await asyncio.sleep(wait_time)
+        except Exception as e:
+            log.warning("delete_webhook пропущен: %s", e)
+            break
+
+    while True:
+        try:
+            log.info("Запуск Telegram Polling...")
+            await dp.start_polling(bot)
+            break
+        except Exception as e:
+            log.error("Ошибка polling бота: %s, перезапуск через 5 сек...", e)
+            await asyncio.sleep(5)
+
+
 async def on_startup(app):
     global http
     http = ClientSession(timeout=ClientTimeout(total=25))
-    await bot.delete_webhook(drop_pending_updates=True)
-    app["polling_task"] = asyncio.create_task(dp.start_polling(bot))
+    # Бот стартует в фоновой задаче, чтобы aiohttp моментально открыл порт для Render
+    app["polling_task"] = asyncio.create_task(start_bot_polling())
 
 
 async def on_cleanup(app):
@@ -1128,6 +1127,7 @@ for route, handler in (
 ):
     server_app.router.add_route("OPTIONS", route, handler)
     server_app.router.add_post(route, handler)
+server_app.router.add_get("/", lambda r: web.json_response({"status": "live", "service": "VibeBoost"}))
 server_app.router.add_get("/health", lambda r: web.json_response({"ok": True}))
 server_app.on_startup.append(on_startup)
 server_app.on_cleanup.append(on_cleanup)
