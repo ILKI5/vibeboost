@@ -415,7 +415,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
     user = message.from_user
     log.info("Received /start from %s (@%s)", user.id, user.username)
     text = (
-        f"👋 <b>Добро пожаловать в VibeBoost, {escape(user.first_name)}!</b>\n"
+        f"👋 <b>Добро пожаловать в HEUPO BOOST, {escape(user.first_name)}!</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Автоматическое продвижение и накрутка в топ для всех социальных сетей.\n\n"
         "Выбери действие ниже:"
@@ -427,7 +427,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
 async def cb_main_menu(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
     text = (
-        f"👋 <b>Главное меню VibeBoost</b>\n"
+        f"👋 <b>Главное меню HEUPO BOOST</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Автоматическое продвижение и накрутка в топ для всех социальных сетей.\n\n"
         "Выбери действие ниже:"
@@ -917,7 +917,7 @@ async def cb_support_start(callback: types.CallbackQuery, state: FSMContext):
         [make_btn("Отмена", callback_data="bot:menu", emoji_id=MENU_EMOJI_IDS.get("menu"))]
     ])
     await callback.message.edit_text(
-        "💬 <b>Служба поддержки VibeBoost</b>\n"
+        "💬 <b>Служба поддержки HEUPO BOOST</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Пожалуйста, напишите ваш вопрос или опишите возникшую проблему одним сообщением.\n\n"
         "<i>Для отмены нажмите кнопку ниже или отправьте /cancel</i>",
@@ -934,7 +934,7 @@ async def cmd_support(message: types.Message, state: FSMContext):
         [make_btn("Отмена", callback_data="bot:menu", emoji_id=MENU_EMOJI_IDS.get("menu"))]
     ])
     await message.answer(
-        "💬 <b>Служба поддержки VibeBoost</b>\n"
+        "💬 <b>Служба поддержки HEUPO BOOST</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Пожалуйста, напишите ваш вопрос или опишите возникшую проблему одним сообщением.\n\n"
         "<i>Для отмены отправьте /cancel</i>",
