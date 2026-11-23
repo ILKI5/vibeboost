@@ -13,6 +13,7 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
+from aiogram.exceptions import TelegramRetryAfter
 from aiogram.types import InlineKeyboardMarkup
 from aiogram.types import InlineKeyboardButton as _BaseInlineKeyboardButton
 
@@ -324,14 +325,23 @@ async def execute_provider_order(user_id: int, item: dict, link: str, quantity: 
         uname = "не указан"
 
     admin_msg = (
-        "🛒 <b>Новый заказ принят!</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        f"👤 Покупатель: {uname} (ID: <code>{user_id}</code>)\n"
-        f"⚙️ Услуга: {escape(item.get('name'))} [#{service_id}]\n"
-        f"🔗 Ссылка: <code>{escape(link)}</code>\n"
-        f"📊 Кол-во: <code>{quantity}</code> шт.\n"
-        f"💰 Списано: <b>{format_money(cost)}</b>\n"
-        f"🧾 Заказ Twiboost: <code>#{order_id}</code>\n\n#id{user_id}"
+        "🛒 <b>Новый заказ принят!</b>
+"
+        "━━━━━━━━━━━━━━━━━━━━
+"
+        f"👤 Покупатель: {uname} (ID: <code>{user_id}</code>)
+"
+        f"⚙️ Услуга: {escape(item.get('name'))} [#{service_id}]
+"
+        f"🔗 Ссылка: <code>{escape(link)}</code>
+"
+        f"📊 Кол-во: <code>{quantity}</code> шт.
+"
+        f"💰 Списано: <b>{format_money(cost)}</b>
+"
+        f"🧾 Заказ Twiboost: <code>#{order_id}</code>
+
+#id{user_id}"
     )
     try:
         await bot.send_message(ADMIN_CHAT_ID, admin_msg, parse_mode="HTML")
@@ -356,12 +366,19 @@ async def cmd_start(msg: types.Message, state: FSMContext):
     # Если пользователь новый — сразу уведомляем админа в личку
     if is_new:
         admin_alert = (
-            "👤 <b>Новый пользователь в боте!</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━\n"
-            f"🔹 Имя: <b>{escape(full_name_str)}</b>\n"
-            f"🔹 Username: {escape(username_str)}\n"
-            f"🆔 ID: <code>{u.id}</code>\n\n"
-            f"Баланс: <code>0.00 ₽</code>\n#new_user #id{u.id}"
+            "👤 <b>Новый пользователь в боте!</b>
+"
+            "━━━━━━━━━━━━━━━━━━━━
+"
+            f"🔹 Имя: <b>{escape(full_name_str)}</b>
+"
+            f"🔹 Username: {escape(username_str)}
+"
+            f"🆔 ID: <code>{u.id}</code>
+
+"
+            f"Баланс: <code>0.00 ₽</code>
+#new_user #id{u.id}"
         )
         try:
             await bot.send_message(ADMIN_CHAT_ID, admin_alert, parse_mode="HTML")
@@ -369,9 +386,13 @@ async def cmd_start(msg: types.Message, state: FSMContext):
             pass
 
     text = (
-        f"👋 <b>Добро пожаловать в VibeBoost, {escape(u.first_name)}!</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "Автоматическое продвижение и накрутка во всех социальных сетях.\n\n"
+        f"👋 <b>Добро пожаловать в VibeBoost, {escape(u.first_name)}!</b>
+"
+        "━━━━━━━━━━━━━━━━━━━━
+"
+        "Автоматическое продвижение и накрутка во всех социальных сетях.
+
+"
         "Выберите действие в меню:"
     )
     await msg.answer(text, reply_markup=main_menu_kb(), parse_mode="HTML")
@@ -380,9 +401,13 @@ async def cmd_start(msg: types.Message, state: FSMContext):
 async def cb_main_menu(call: types.CallbackQuery, state: FSMContext):
     await state.clear()
     text = (
-        "👋 <b>Главное меню VibeBoost</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "Автоматическое продвижение и накрутка во всех социальных сетях.\n\n"
+        "👋 <b>Главное меню VibeBoost</b>
+"
+        "━━━━━━━━━━━━━━━━━━━━
+"
+        "Автоматическое продвижение и накрутка во всех социальных сетях.
+
+"
         "Выберите действие в меню:"
     )
     try:
@@ -401,13 +426,21 @@ async def show_profile(event: types.Message | types.CallbackQuery, state: FSMCon
     uname = f"@{u.username}" if u.username else "не указан"
 
     text = (
-        "👤 <b>Ваш личный профиль VibeBoost</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        f"🔹 <b>Имя:</b> {escape(u.full_name)}\n"
-        f"🔹 <b>Username:</b> {escape(uname)}\n"
-        f"🆔 <b>Telegram ID:</b> <code>{u.id}</code>\n\n"
-        f"💳 <b>Текущий баланс:</b> <b>{format_money(bal)}</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
+        "👤 <b>Ваш личный профиль VibeBoost</b>
+"
+        "━━━━━━━━━━━━━━━━━━━━
+"
+        f"🔹 <b>Имя:</b> {escape(u.full_name)}
+"
+        f"🔹 <b>Username:</b> {escape(uname)}
+"
+        f"🆔 <b>Telegram ID:</b> <code>{u.id}</code>
+
+"
+        f"💳 <b>Текущий баланс:</b> <b>{format_money(bal)}</b>
+"
+        "━━━━━━━━━━━━━━━━━━━━
+"
         "<i>Пополняйте баланс и запускайте заказы моментально!</i>"
     )
     kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -448,9 +481,12 @@ async def cb_net(call: types.CallbackQuery):
     net, items, pages, page, kb = services_by_net_kb(idx, 0)
     icon = tg_icon(net)
     text = (
-        f"{icon} <b>{escape(net)}</b> · Услуги продвижения\n"
-        f"Найдено услуг: <b>{len(items)}</b> (стр. {page+1}/{pages})\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"{icon} <b>{escape(net)}</b> · Услуги продвижения
+"
+        f"Найдено услуг: <b>{len(items)}</b> (стр. {page+1}/{pages})
+"
+        "━━━━━━━━━━━━━━━━━━━━
+"
         "Выберите услугу из списка ниже:"
     )
     await call.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
@@ -462,9 +498,12 @@ async def cb_netpage(call: types.CallbackQuery):
     net, items, pages, p, kb = services_by_net_kb(int(idx), int(page))
     icon = tg_icon(net)
     text = (
-        f"{icon} <b>{escape(net)}</b> · Услуги продвижения\n"
-        f"Найдено услуг: <b>{len(items)}</b> (стр. {p+1}/{pages})\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"{icon} <b>{escape(net)}</b> · Услуги продвижения
+"
+        f"Найдено услуг: <b>{len(items)}</b> (стр. {p+1}/{pages})
+"
+        "━━━━━━━━━━━━━━━━━━━━
+"
         "Выберите услугу из списка ниже:"
     )
     await call.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
@@ -487,14 +526,23 @@ async def cb_srv(call: types.CallbackQuery):
     if len(desc) > 800: desc = desc[:800] + "…"
 
     text = (
-        f"{tg_icon(net)} <b>{escape(str(item.get('name')))}</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        f"🌐 <b>Площадка:</b> {escape(net)}\n"
-        f"📁 <b>Категория:</b> {escape(str(item.get('category', '—')))}\n"
-        f"🔢 <b>ID:</b> <code>{escape(sid)}</code>\n"
-        f"💎 <b>Цена:</b> <code>{format_unit_price(item.get('rate', 0))}</code> за 1 шт.\n"
-        f"📊 <b>Лимиты:</b> от <code>{item.get('min')}</code> до <code>{item.get('max')}</code> шт.\n\n"
-        f"<b>Описание:</b>\n{escape(desc)}"
+        f"{tg_icon(net)} <b>{escape(str(item.get('name')))}</b>
+"
+        "━━━━━━━━━━━━━━━━━━━━
+"
+        f"🌐 <b>Площадка:</b> {escape(net)}
+"
+        f"📁 <b>Категория:</b> {escape(str(item.get('category', '—')))}
+"
+        f"🔢 <b>ID:</b> <code>{escape(sid)}</code>
+"
+        f"💎 <b>Цена:</b> <code>{format_unit_price(item.get('rate', 0))}</code> за 1 шт.
+"
+        f"📊 <b>Лимиты:</b> от <code>{item.get('min')}</code> до <code>{item.get('max')}</code> шт.
+
+"
+        f"<b>Описание:</b>
+{escape(desc)}"
     )
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [make_btn("🚀 Заказать услугу", callback_data=f"order:{sid}")],
@@ -520,9 +568,13 @@ async def cb_order(call: types.CallbackQuery, state: FSMContext):
     await state.set_state(BotOrder.waiting_link)
     await state.update_data(sid=sid)
     await call.message.answer(
-        f"🔗 <b>Оформление заказа:</b> «{escape(item.get('name'))}»\n"
-        f"Цена за 1 шт: <code>{format_unit_price(item.get('rate', 0))}</code>\n\n"
-        "Отправьте ссылку на пост, канал или страницу:\n"
+        f"🔗 <b>Оформление заказа:</b> «{escape(item.get('name'))}»
+"
+        f"Цена за 1 шт: <code>{format_unit_price(item.get('rate', 0))}</code>
+
+"
+        "Отправьте ссылку на пост, канал или страницу:
+"
         "<i>(Отмена — /cancel)</i>",
         parse_mode="HTML"
     )
@@ -565,7 +617,8 @@ async def step_comments(msg: types.Message, state: FSMContext):
     if not (int(item["min"]) <= len(lines) <= int(item["max"])):
         await msg.answer(f"⚠️ Нужно от {item['min']} до {item['max']} строк. Попробуйте еще раз:")
         return
-    await state.update_data(comments="\n".join(lines), qty=len(lines))
+    await state.update_data(comments="
+".join(lines), qty=len(lines))
     await show_confirm(msg, state, item, len(lines))
 
 @dp.message(BotOrder.waiting_poll_answer)
@@ -599,22 +652,30 @@ async def show_confirm(msg: types.Message, state: FSMContext, item: dict, qty: i
     bal = udata["balance"]
 
     text = (
-        "📋 <b>Подтверждение заказа</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        f"⚙️ <b>Услуга:</b> {escape(item.get('name'))}\n"
-        f"📊 <b>Количество:</b> {qty} шт.\n"
-        f"💰 <b>К оплате:</b> <b>{format_money(cost)}</b>\n"
-        f"💳 <b>Ваш баланс:</b> {format_money(bal)}\n"
+        "📋 <b>Подтверждение заказа</b>
+"
+        "━━━━━━━━━━━━━━━━━━━━
+"
+        f"⚙️ <b>Услуга:</b> {escape(item.get('name'))}
+"
+        f"📊 <b>Количество:</b> {qty} шт.
+"
+        f"💰 <b>К оплате:</b> <b>{format_money(cost)}</b>
+"
+        f"💳 <b>Ваш баланс:</b> {format_money(bal)}
+"
     )
 
     if bal < cost:
-        text += f"\n⚠️ Недостаточно средств! Не хватает <b>{format_money(cost - bal)}</b>."
+        text += f"
+⚠️ Недостаточно средств! Не хватает <b>{format_money(cost - bal)}</b>."
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [make_btn("Пополнить баланс", callback_data="bot:topup", emoji_id=MENU_EMOJI_IDS.get("topup"))],
             [make_btn("Отмена", callback_data="botorder:cancel")]
         ])
     else:
-        text += "\nЗапустить накрутку?"
+        text += "
+Запустить накрутку?"
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [make_btn("✅ Подтвердить и оплатить", callback_data="botorder:confirm")],
             [make_btn("❌ Отмена", callback_data="botorder:cancel")]
@@ -642,10 +703,14 @@ async def cb_confirm_order(call: types.CallbackQuery, state: FSMContext):
             data.get("comments"), data.get("answer_number")
         )
         await call.message.edit_text(
-            f"🎉 <b>Заказ #{oid} запущен!</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━\n"
-            f"⚙️ <b>Услуга:</b> {escape(item.get('name'))}\n"
-            f"💰 <b>Списано:</b> {format_money(cost)}\n"
+            f"🎉 <b>Заказ #{oid} запущен!</b>
+"
+            "━━━━━━━━━━━━━━━━━━━━
+"
+            f"⚙️ <b>Услуга:</b> {escape(item.get('name'))}
+"
+            f"💰 <b>Списано:</b> {format_money(cost)}
+"
             f"💳 <b>Остаток:</b> {format_money(new_bal)}",
             reply_markup=main_menu_kb(),
             parse_mode="HTML"
@@ -661,9 +726,12 @@ async def cb_confirm_order(call: types.CallbackQuery, state: FSMContext):
 async def cb_topup(call: types.CallbackQuery, state: FSMContext):
     await state.set_state(BotTopup.waiting_amount)
     await call.message.edit_text(
-        "💳 <b>Пополнение баланса</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "Введите сумму пополнения в рублях (от 10 до 100 000 ₽):\n"
+        "💳 <b>Пополнение баланса</b>
+"
+        "━━━━━━━━━━━━━━━━━━━━
+"
+        "Введите сумму пополнения в рублях (от 10 до 100 000 ₽):
+"
         "<i>(Отмена — /cancel)</i>",
         parse_mode="HTML"
     )
@@ -681,11 +749,17 @@ async def process_topup(msg: types.Message, state: FSMContext):
     await state.clear()
     u = msg.from_user
     admin_text = (
-        "💳 <b>Запрос на пополнение баланса!</b>\n"
-        f"👤 От: {escape(u.full_name)} (@{escape(u.username or '—')})\n"
-        f"🆔 ID: <code>{u.id}</code>\n"
-        f"💰 Сумма: <b>{format_money(amt)}</b>\n\n"
-        f"Зачислить: <code>/addbalance {u.id} {amt}</code>\n#id{u.id}"
+        "💳 <b>Запрос на пополнение баланса!</b>
+"
+        f"👤 От: {escape(u.full_name)} (@{escape(u.username or '—')})
+"
+        f"🆔 ID: <code>{u.id}</code>
+"
+        f"💰 Сумма: <b>{format_money(amt)}</b>
+
+"
+        f"Зачислить: <code>/addbalance {u.id} {amt}</code>
+#id{u.id}"
     )
     try:
         await bot.send_message(ADMIN_CHAT_ID, admin_text, parse_mode="HTML")
@@ -693,7 +767,8 @@ async def process_topup(msg: types.Message, state: FSMContext):
         pass
 
     await msg.answer(
-        f"✅ <b>Запрос на {format_money(amt)} отправлен администратору!</b>\n"
+        f"✅ <b>Запрос на {format_money(amt)} отправлен администратору!</b>
+"
         "Баланс обновится сразу после подтверждения платежа.",
         reply_markup=main_menu_kb(),
         parse_mode="HTML"
@@ -704,9 +779,12 @@ async def cb_support(call: types.CallbackQuery, state: FSMContext):
     await state.set_state(BotSupport.waiting_question)
     kb = InlineKeyboardMarkup(inline_keyboard=[[make_btn("Отмена", callback_data="bot:menu", emoji_id=MENU_EMOJI_IDS.get("menu"))]])
     await call.message.edit_text(
-        "💬 <b>Служба поддержки VibeBoost</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "Напишите ваш вопрос или опишите проблему одним сообщением:\n"
+        "💬 <b>Служба поддержки VibeBoost</b>
+"
+        "━━━━━━━━━━━━━━━━━━━━
+"
+        "Напишите ваш вопрос или опишите проблему одним сообщением:
+"
         "<i>(Отмена — /cancel)</i>",
         reply_markup=kb,
         parse_mode="HTML"
@@ -722,11 +800,19 @@ async def process_support(msg: types.Message, state: FSMContext):
     await state.clear()
     u = msg.from_user
     admin_msg = (
-        "🆘 <b>Новое обращение в поддержку!</b>\n"
-        f"👤 От: {escape(u.full_name)} (@{escape(u.username or '—')})\n"
-        f"🆔 ID: <code>{u.id}</code>\n\n"
-        f"<b>Вопрос:</b>\n{escape(txt)}\n\n"
-        f"Ответить: <code>/send {u.id} </code>\n#id{u.id}"
+        "🆘 <b>Новое обращение в поддержку!</b>
+"
+        f"👤 От: {escape(u.full_name)} (@{escape(u.username or '—')})
+"
+        f"🆔 ID: <code>{u.id}</code>
+
+"
+        f"<b>Вопрос:</b>
+{escape(txt)}
+
+"
+        f"Ответить: <code>/send {u.id} </code>
+#id{u.id}"
     )
     try:
         await bot.send_message(ADMIN_CHAT_ID, admin_msg, parse_mode="HTML")
@@ -749,7 +835,8 @@ async def admin_addbalance(msg: types.Message):
     if ok:
         await msg.reply(f"✅ Баланс <code>{tid}</code> пополнен на <b>{format_money(amt)}</b>. Баланс: <b>{format_money(nbal)}</b>", parse_mode="HTML")
         try:
-            await bot.send_message(tid, f"💎 <b>Ваш баланс пополнен на {format_money(amt)}!</b>\nТекущий баланс: <b>{format_money(nbal)}</b>", parse_mode="HTML")
+            await bot.send_message(tid, f"💎 <b>Ваш баланс пополнен на {format_money(amt)}!</b>
+Текущий баланс: <b>{format_money(nbal)}</b>", parse_mode="HTML")
         except Exception: pass
     else:
         await msg.reply("❌ Пользователь не найден.")
@@ -783,24 +870,27 @@ async def admin_reload(msg: types.Message):
 # ВЕБ-СЕРВЕР ДЛЯ RENDER + НАДЁЖНЫЙ ЗАПУСК БОТА
 # =====================================================================
 async def start_bot_polling():
-    # 3 секунды задержки, чтобы предыдущий процесс Render гарантированно закрыл сессию
-    await asyncio.sleep(3)
-    try:
-        await bot.delete_webhook(drop_pending_updates=True)
-        log.info("Вебхук очищен.")
-    except Exception as e:
-        log.warning("delete_webhook пропущен: %s", e)
+    # 8 секунд задержки, чтобы предыдущий контейнер Render гарантированно завершил работу
+    await asyncio.sleep(8)
 
     while True:
         try:
             log.info("Запуск Telegram Polling...")
-            await dp.start_polling(bot, handle_signals=False)
+            await dp.start_polling(
+                bot,
+                handle_signals=False,
+                drop_pending_updates=True
+            )
         except asyncio.CancelledError:
             log.info("Polling остановлен штатно.")
             break
+        except TelegramRetryAfter as e:
+            wait_sec = e.retry_after + 3
+            log.warning("Telegram Flood Control! Ждём %s сек...", wait_sec)
+            await asyncio.sleep(wait_sec)
         except Exception as e:
-            log.error("Сбой polling: %s. Перезапуск через 5 сек...", e, exc_info=True)
-            await asyncio.sleep(5)
+            log.error("Сбой polling: %s. Перезапуск через 10 сек...", e, exc_info=True)
+            await asyncio.sleep(10)
 
 async def on_startup(app):
     global http
