@@ -1,51 +1,120 @@
 import os
-import hmac
-import hashlib
 import json
 import logging
 import asyncio
-import time
 from pathlib import Path
-from urllib.parse import parse_qsl
 from html import escape
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional, Dict, List
 
 from aiohttp import web, ClientSession, ClientTimeout
+import aiosqlite
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramRetryAfter
-from aiogram.types import (
-    InlineKeyboardMarkup,
-    WebAppInfo,
-)
+from aiogram.types import InlineKeyboardMarkup
 from aiogram.types import InlineKeyboardButton as _BaseInlineKeyboardButton
 
-# Расширение модели для гарантированной сериализации icon_custom_emoji_id (Bot API 9.4+)
+# Расширение модели для icon_custom_emoji_id
 class InlineKeyboardButton(_BaseInlineKeyboardButton):
     icon_custom_emoji_id: Optional[str] = None
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 log = logging.getLogger("vibeboost")
 
+# Переменные берутся из настроек Render (Environment)
 BOT_TOKEN = os.environ["BOT_TOKEN"].strip()
 ADMIN_CHAT_ID = int(os.environ["ADMIN_CHAT_ID"])
-WEBAPP_ORIGIN = os.environ["WEBAPP_ORIGIN"].rstrip("/")
-SHEETS_API_URL = os.environ["SHEETS_API_URL"].strip()
-SHEETS_API_SECRET = os.environ["SHEETS_API_SECRET"].strip()
 TWIBOOST_API_KEY = os.environ["TWIBOOST_API_KEY"].strip()
 PORT = int(os.getenv("PORT", "8080"))
 CATALOG_PATH = Path(os.getenv("CATALOG_PATH", "services.json"))
+DB_PATH = Path("database.db")
 PAGE_SIZE = 6
 
 bot = Bot(BOT_TOKEN)
 dp = Dispatcher()
-http: ClientSession | None = None
+http: Optional[ClientSession] = None
 
 # =====================================================================
-# IN-MEMORY КЭШ КАТАЛОГА (МГНОВЕННЫЙ ОТВЕТ В RAM)
+# БАЗА ДАННЫХ SQLITE (МГНОВЕННЫЙ ОТКЛИК)
+# =====================================================================
+async def init_db():
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                user_id INTEGER PRIMARY KEY,
+                username TEXT,
+                full_name TEXT,
+                balance REAL DEFAULT 0.0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS transactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                amount REAL,
+                balance_after REAL,
+                comment TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        await db.commit()
+    log.info("База данных SQLite инициализирована.")
+
+async def get_user(user_id: int, username: str = "", full_name: str = "") -> dict:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                if username or full_name:
+                    await db.execute(
+                        "UPDATE users SET username = ?, full_name = ? WHERE user_id = ?",
+                        (username, full_name, user_id)
+                    )
+                    await db.commit()
+                return dict(row)
+
+        await db.execute(
+            "INSERT INTO users (user_id, username, full_name, balance) VALUES (?, ?, ?, 0.0)",
+            (user_id, username, full_name)
+        )
+        await db.commit()
+        return {"user_id": user_id, "username": username, "full_name": full_name, "balance": 0.0}
+
+async def update_balance(user_id: int, delta_amount: float, comment: str = "") -> tuple[bool, float]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,)) as cursor:
+            row = await cursor.fetchone()
+            if not row:
+                return False, 0.0
+
+            current_balance = float(row["balance"])
+            new_balance = round(current_balance + delta_amount, 2)
+
+            if new_balance < 0:
+                return False, current_balance
+
+            await db.execute("UPDATE users SET balance = ? WHERE user_id = ?", (new_balance, user_id))
+            await db.execute(
+                "INSERT INTO transactions (user_id, amount, balance_after, comment) VALUES (?, ?, ?, ?)",
+                (user_id, delta_amount, new_balance, comment)
+            )
+            await db.commit()
+            return True, new_balance
+
+async def get_total_users_count() -> int:
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT COUNT(*) FROM users") as cursor:
+            res = await cursor.fetchone()
+            return res[0] if res else 0
+
+# =====================================================================
+# IN-MEMORY КЭШ КАТАЛОГА (ОТВЕТ ЗА 0.001 СЕК)
 # =====================================================================
 CATALOG_BY_ID: Dict[str, dict] = {}
 NETWORKS_LIST: List[tuple[str, int]] = []
@@ -54,15 +123,11 @@ SERVICES_BY_NET: Dict[str, List[dict]] = {}
 def init_catalog_cache():
     global CATALOG_BY_ID, NETWORKS_LIST, SERVICES_BY_NET
     if not CATALOG_PATH.exists():
-        log.warning("Файл каталога %s не найден!", CATALOG_PATH)
+        log.warning("Каталог %s не найден!", CATALOG_PATH)
         return
 
     try:
         data = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
-        if not isinstance(data, list):
-            log.error("services.json должен быть списком!")
-            return
-
         cat_by_id = {}
         by_net: Dict[str, List[dict]] = {}
 
@@ -71,68 +136,22 @@ def init_catalog_cache():
                 sid = str(item["service"])
                 net = str(item.get("network") or "Прочее")
                 cat_by_id[sid] = item
-                if net not in by_net:
-                    by_net[net] = []
-                by_net[net].append(item)
+                by_net.setdefault(net, []).append(item)
 
         for net in by_net:
             by_net[net].sort(key=lambda x: str(x.get("name", "")).casefold())
 
         sorted_nets = sorted(by_net.keys(), key=str.casefold)
-        net_list = [(net, len(by_net[net])) for net in sorted_nets]
-
         CATALOG_BY_ID = cat_by_id
-        NETWORKS_LIST = net_list
+        NETWORKS_LIST = [(net, len(by_net[net])) for net in sorted_nets]
         SERVICES_BY_NET = by_net
-        log.info("Каталог загружен в RAM: %d услуг, %d соцсетей.", len(cat_by_id), len(net_list))
+        log.info("Каталог загружен в RAM: %d услуг, %d соцсетей.", len(cat_by_id), len(sorted_nets))
     except Exception as exc:
-        log.exception("Ошибка загрузки каталога: %s", exc)
+        log.exception("Ошибка парсинга каталога: %s", exc)
 
 init_catalog_cache()
 
-def get_service(service_id: str) -> Optional[dict]:
-    return CATALOG_BY_ID.get(str(service_id))
-
-
-# Реестр премиум-эмодзи площадок для кнопок (icon_custom_emoji_id)
-PREMIUM_EMOJI_IDS = {
-    "Авито": "5206315603379373105",
-    "Дзен": "5359312848247857963",
-    "Одноклассники": "5359535718395812756",
-    "Яндекс Маркет": "5206690180362158433",
-    "Яндекс Музыка": "5359586068297425068",
-    "CoinMarketCap": "5345803067272994307",
-    "Facebook": "5355254460635428635",
-    "Github": "5357135871059440242",
-    "Instagram": "5355097780228470775",
-    "Kick": "5289683581474464897",
-    "Likee": "5352672553930342216",
-    "Linkedin": "5357053089859772828",
-    "MAX": "5458653586378469798",
-    "Medium": "5456341901835772035",
-    "Ozon": "5206507661431947835",
-    "Pinterest": "5352595631066071365",
-    "Rutube": "5375542803809979254",
-    "RuTube": "5375542803809979254",
-    "Spotify": "5206361550939506453",
-    "Steam": "5206370578960760792",
-    "Telegram": "5285350148451344065",
-    "Telegram Premium": "5969715206673141221",
-    "Threads": "5273863760929372027",
-    "TikTok": "5353034628263330616",
-    "Twitch": "5352759664457038886",
-    "Twitter": "5357203031463050136",
-    "Twitter X": "5357203031463050136",
-    "VC.ru": "5359557455225299074",
-    "VK": "5359619818150436536",
-    "ВКонтакте": "5359619818150436536",
-    "Wibes": "5445058185230571497",
-    "Wildberries": "5420219968451003929",
-    "Yappy": "5068989216705217525",
-    "YouTube": "5454010052421626926",
-}
-
-# Иконки разделов меню
+# Иконки кнопок
 MENU_EMOJI_IDS = {
     "catalog": "5766994197705921104",
     "profile": "5879770735999717115",
@@ -141,18 +160,31 @@ MENU_EMOJI_IDS = {
     "support": "6030400221232501136",
 }
 
-# Безопасные текстовые эмодзи (для сообщений)
-def tg_icon(name: str) -> str:
-    net_lower = name.lower()
-    if "telegram" in net_lower: return "✈️"
-    if "vk" in net_lower or "вконтакте" in net_lower: return "🟦"
-    if "youtube" in net_lower: return "▶️"
-    if "instagram" in net_lower: return "📸"
-    if "tiktok" in net_lower: return "🎵"
-    if "twitter" in net_lower: return "🐦"
-    if "twitch" in net_lower: return "🟣"
-    return "🌐"
+PREMIUM_EMOJI_IDS = {
+    "Telegram": "5285350148451344065",
+    "VK": "5359619818150436536",
+    "ВКонтакте": "5359619818150436536",
+    "Instagram": "5355097780228470775",
+    "TikTok": "5353034628263330616",
+    "YouTube": "5454010052421626926",
+    "Twitter": "5357203031463050136",
+    "Twitter X": "5357203031463050136",
+    "Twitch": "5352759664457038886",
+    "Дзен": "5359312848247857963",
+    "Rutube": "5375542803809979254",
+    "RuTube": "5375542803809979254",
+}
 
+def tg_icon(name: str) -> str:
+    n = name.lower()
+    if "telegram" in n: return "✈️"
+    if "vk" in n or "вконтакте" in n: return "🟦"
+    if "youtube" in n: return "▶️"
+    if "instagram" in n: return "📸"
+    if "tiktok" in n: return "🎵"
+    if "twitter" in n: return "🐦"
+    if "twitch" in n: return "🟣"
+    return "🌐"
 
 class BotOrder(StatesGroup):
     waiting_link = State()
@@ -167,173 +199,25 @@ class BotTopup(StatesGroup):
 class BotSupport(StatesGroup):
     waiting_question = State()
 
-
-def cors_headers():
-    return {
-        "Access-Control-Allow-Origin": WEBAPP_ORIGIN,
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
-        "Access-Control-Max-Age": "86400",
-        "Vary": "Origin",
-    }
-
-
-def validate_init_data(raw: str) -> dict:
-    if not raw:
-        raise ValueError("Telegram initData отсутствует")
-    pairs = dict(parse_qsl(raw, keep_blank_values=True))
-    received_hash = pairs.pop("hash", None)
-    if not received_hash:
-        raise ValueError("В initData отсутствует hash")
-    auth_date = int(pairs.get("auth_date", "0"))
-    if not auth_date or time.time() - auth_date > 86400:
-        raise ValueError("initData устарел; перезапустите Mini App")
-    check = "\n".join(f"{key}={pairs[key]}" for key in sorted(pairs))
-    secret = hmac.new(b"WebAppData", BOT_TOKEN.encode(), hashlib.sha256).digest()
-    expected = hmac.new(secret, check.encode(), hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(expected, received_hash):
-        raise ValueError("Неверная подпись Telegram initData")
-    user = json.loads(pairs.get("user", "{}"))
-    if not user.get("id"):
-        raise ValueError("В initData отсутствует пользователь")
-    return user
-
-
-def format_money(value):
+def format_money(value) -> str:
     return f"{Decimal(str(value)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP):,}".replace(",", " ") + " ₽"
 
-
-def format_unit_price(rate_per_1000):
+def format_unit_price(rate_per_1000) -> str:
     unit = Decimal(str(rate_per_1000)) / Decimal(1000)
     if unit >= 1:
         return f"{unit.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)} ₽"
     return f"{unit.quantize(Decimal('0.0001'), rounding=ROUND_HALF_UP)} ₽"
 
-
-def order_cost(rate, quantity):
+def order_cost(rate, quantity) -> float:
     return float((Decimal(str(rate)) * Decimal(int(quantity)) / Decimal(1000)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
-
-async def sheets(action: str, **fields):
-    if http is None:
-        raise RuntimeError("HTTP session не запущена")
-    body = {"secret": SHEETS_API_SECRET, "action": action, **fields}
-    async with http.post(SHEETS_API_URL, json=body, allow_redirects=True) as response:
-        raw = await response.text()
-        try:
-            result = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise RuntimeError(f"Google Sheets вернул не JSON ({response.status})") from exc
-        if response.status >= 400 or not result.get("ok"):
-            raise RuntimeError(str(result.get("error", f"Sheets error {response.status}")))
-        return result
-
-
-async def execute_provider_order(user_id: int, item: dict, link: str, quantity: int,
-                                 comments: str | None = None, answer_number: str | None = None):
-    service_id = str(item["service"])
-    charge_amount = order_cost(item["rate"], quantity)
-    if charge_amount <= 0:
-        raise ValueError("Некорректная сумма заказа")
-
-    charged = await sheets("charge", user_id=user_id, amount=charge_amount, comment=f"Заказ услуги #{service_id}")
-    if http is None:
-        await sheets("refund", user_id=user_id, amount=charge_amount, comment="Возврат")
-        raise RuntimeError("API поставщика недоступен")
-
-    provider_params = {
-        "action": "add",
-        "service": service_id,
-        "link": link,
-        "quantity": str(quantity),
-        "key": TWIBOOST_API_KEY,
-    }
-    if comments:
-        provider_params["comments"] = comments
-    if answer_number:
-        provider_params["answer_number"] = str(answer_number)
-
-    try:
-        async with http.get("https://twiboost.com/api/v2", params=provider_params, timeout=ClientTimeout(total=35)) as resp:
-            raw = await resp.text()
-            data = json.loads(raw)
-    except Exception:
-        log.exception("Twiboost error for %s", user_id)
-        raise RuntimeError("Статус заказа уточняется у поставщика.")
-
-    provider_order_id = data.get("order")
-    if provider_order_id is None:
-        err = str(data.get("error", "Отказ поставщика"))
-        await sheets("refund", user_id=user_id, amount=charge_amount, comment=f"Возврат: {service_id}")
-        raise RuntimeError(f"Поставщик отклонил заказ: {err}")
-
-    provider_order_id = str(provider_order_id)
-    new_balance = float(charged.get("balance", 0))
-
-    try:
-        user_chat = await bot.get_chat(user_id)
-        name = escape(user_chat.first_name or "Пользователь")
-        username = f"@{user_chat.username}" if user_chat.username else "не указан"
-    except Exception:
-        name, username = "Пользователь", "не указан"
-
-    net_name = str(item.get('network', '—'))
-    icon = tg_icon(net_name)
-
-    admin_text = (
-        "🛒 <b>Новый заказ принят</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        f"👤 Покупатель: {name} ({username})\n"
-        f"🆔 ID: <code>{user_id}</code>\n"
-        f"{icon} Площадка: {escape(net_name)}\n"
-        f"📁 Категория: {escape(str(item.get('category', '—')))}\n"
-        f"⚙️ Услуга: {escape(str(item.get('name')))} [#{service_id}]\n"
-        f"🔗 Ссылка: <code>{escape(link)}</code>\n"
-        f"📊 Количество: <code>{quantity}</code>\n"
-        f"💰 Списано: <code>{format_money(charge_amount)}</code>\n"
-        f"🧾 Заказ в Twiboost: <code>#{provider_order_id}</code>\n\n#id{user_id}"
-    )
-    try:
-        await bot.send_message(ADMIN_CHAT_ID, admin_text, parse_mode="HTML")
-    except Exception:
-        pass
-
-    user_receipt = (
-        "💎 <b>Ваш заказ успешно оформлен!</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        f"{icon} <b>Площадка:</b> {escape(net_name)}\n"
-        f"📁 <b>Категория:</b> {escape(str(item.get('category', '—')))}\n"
-        f"⚙️ <b>Услуга:</b> {escape(str(item.get('name')))}\n"
-        f"🔗 <b>Ссылка:</b> <code>{escape(link)}</code>\n"
-        f"📊 <b>Количество:</b> <code>{quantity} шт.</code>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        f"💰 <b>Списано с баланса:</b> <code>{format_money(charge_amount)}</code>\n"
-        f"💳 <b>Остаток на балансе:</b> <b>{format_money(new_balance)}</b>\n"
-        f"🧾 <b>Номер заказа:</b> <code>#{provider_order_id}</code>\n\n"
-        "<i>Заказ запущен в автоматическом режиме!</i>"
-    )
-    try:
-        await bot.send_message(user_id, user_receipt, parse_mode="HTML")
-    except Exception:
-        pass
-
-    return {"provider_id": provider_order_id, "new_balance": new_balance, "charge": charge_amount}
-
-
-# =====================================================================
-# КЛАВИАТУРЫ
-# =====================================================================
-
-def make_btn(text: str, callback_data: str | None = None, emoji_id: str | None = None, web_app: WebAppInfo | None = None) -> InlineKeyboardButton:
+def make_btn(text: str, callback_data: str | None = None, emoji_id: str | None = None) -> InlineKeyboardButton:
     kwargs = {"text": text}
-    if callback_data is not None:
+    if callback_data:
         kwargs["callback_data"] = callback_data
-    if web_app is not None:
-        kwargs["web_app"] = web_app
     if emoji_id:
         kwargs["icon_custom_emoji_id"] = str(emoji_id)
     return InlineKeyboardButton(**kwargs)
-
 
 def main_menu_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -344,19 +228,13 @@ def main_menu_kb():
         [
             make_btn("Пополнить баланс", callback_data="bot:topup", emoji_id=MENU_EMOJI_IDS.get("topup")),
             make_btn("Поддержка", callback_data="bot:support", emoji_id=MENU_EMOJI_IDS.get("support")),
-        ],
-        [
-            make_btn("Mini App", web_app=WebAppInfo(url=WEBAPP_ORIGIN)),
         ]
     ])
 
-
 def networks_kb():
-    buttons = []
-    row = []
-    for index, (net, count) in enumerate(NETWORKS_LIST):
-        emoji_id = PREMIUM_EMOJI_IDS.get(net)
-        btn = make_btn(text=f"{net} · {count}", callback_data=f"net:{index}", emoji_id=emoji_id)
+    buttons, row = [], []
+    for idx, (net, count) in enumerate(NETWORKS_LIST):
+        btn = make_btn(f"{net} · {count}", callback_data=f"net:{idx}", emoji_id=PREMIUM_EMOJI_IDS.get(net))
         row.append(btn)
         if len(row) == 2:
             buttons.append(row)
@@ -370,25 +248,18 @@ def networks_kb():
     ])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-
-def services_by_network_kb(net_idx: int, page: int = 0):
-    if not NETWORKS_LIST:
-        return "Прочее", [], 1, 0, InlineKeyboardMarkup(inline_keyboard=[])
-
-    if not (0 <= net_idx < len(NETWORKS_LIST)):
+def services_by_net_kb(net_idx: int, page: int = 0):
+    if not NETWORKS_LIST or not (0 <= net_idx < len(NETWORKS_LIST)):
         net_idx = 0
     net, _ = NETWORKS_LIST[net_idx]
-
     items = SERVICES_BY_NET.get(net, [])
     pages = max(1, (len(items) + PAGE_SIZE - 1) // PAGE_SIZE)
     page = max(0, min(page, pages - 1))
 
     buttons = []
-    for item in items[page * PAGE_SIZE : (page + 1) * PAGE_SIZE]:
-        name = str(item.get("name", "Услуга"))
-        price = format_unit_price(item.get("rate", 0))
-        btn_caption = f"{name[:34]} · {price}/шт"
-        buttons.append([make_btn(btn_caption, callback_data=f"srv:{item['service']}:{net_idx}:{page}")])
+    for it in items[page * PAGE_SIZE : (page + 1) * PAGE_SIZE]:
+        p = format_unit_price(it.get("rate", 0))
+        buttons.append([make_btn(f"{str(it.get('name'))[:34]} · {p}/шт", callback_data=f"srv:{it['service']}:{net_idx}:{page}")])
 
     nav = []
     if page > 0:
@@ -405,71 +276,112 @@ def services_by_network_kb(net_idx: int, page: int = 0):
     ])
     return net, items, pages, page, InlineKeyboardMarkup(inline_keyboard=buttons)
 
+# =====================================================================
+# ВЫПОЛНЕНИЕ ЗАКАЗА В TWIBOOST
+# =====================================================================
+async def execute_provider_order(user_id: int, item: dict, link: str, quantity: int, comments: str = None, answer_number: str = None):
+    service_id = str(item["service"])
+    cost = order_cost(item["rate"], quantity)
+    
+    ok, new_bal = await update_balance(user_id, -cost, f"Заказ услуги #{service_id}")
+    if not ok:
+        raise ValueError("Недостаточно средств на балансе")
 
-# ==========================================
-# ОБРАБОТЧИКИ КОМАНД И МЕНЮ
-# ==========================================
+    params = {
+        "action": "add",
+        "service": service_id,
+        "link": link,
+        "quantity": str(quantity),
+        "key": TWIBOOST_API_KEY,
+    }
+    if comments: params["comments"] = comments
+    if answer_number: params["answer_number"] = str(answer_number)
 
-@dp.message(Command("start"))
-async def cmd_start(message: types.Message, state: FSMContext):
-    await state.clear()
-    user = message.from_user
-    log.info("Received /start from %s (@%s)", user.id, user.username)
-    text = (
-        f"👋 <b>Добро пожаловать в VibeBoost, {escape(user.first_name)}!</b>\n"
+    try:
+        async with http.get("https://twiboost.com/api/v2", params=params, timeout=ClientTimeout(total=35)) as resp:
+            data = await resp.json(content_type=None)
+    except Exception as exc:
+        log.error("Сбой поставщика: %s", exc)
+        await update_balance(user_id, cost, f"Возврат по сбою #{service_id}")
+        raise RuntimeError("Сервер поставщика не отвечает. Средства возвращены.")
+
+    order_id = data.get("order")
+    if not order_id:
+        err = data.get("error", "Отказ поставщика")
+        await update_balance(user_id, cost, f"Возврат: {err}")
+        raise RuntimeError(f"Поставщик отклонил: {err}")
+
+    try:
+        u = await bot.get_chat(user_id)
+        uname = f"@{u.username}" if u.username else "не указан"
+    except Exception:
+        uname = "не указан"
+
+    admin_msg = (
+        "🛒 <b>Новый заказ принят!</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        "Автоматическое продвижение и накрутка в топ для всех социальных сетей.\n\n"
-        "Выбери действие ниже:"
+        f"👤 Покупатель: {uname} (ID: <code>{user_id}</code>)\n"
+        f"⚙️ Услуга: {escape(item.get('name'))} [#{service_id}]\n"
+        f"🔗 Ссылка: <code>{escape(link)}</code>\n"
+        f"📊 Кол-во: <code>{quantity}</code> шт.\n"
+        f"💰 Списано: <b>{format_money(cost)}</b>\n"
+        f"🧾 Заказ Twiboost: <code>#{order_id}</code>\n\n#id{user_id}"
     )
-    await message.answer(text, reply_markup=main_menu_kb(), parse_mode="HTML")
+    try:
+        await bot.send_message(ADMIN_CHAT_ID, admin_msg, parse_mode="HTML")
+    except Exception:
+        pass
 
+    return order_id, new_bal, cost
+
+# =====================================================================
+# ОБРАБОТЧИКИ
+# =====================================================================
+@dp.message(Command("start"))
+async def cmd_start(msg: types.Message, state: FSMContext):
+    await state.clear()
+    await get_user(msg.from_user.id, msg.from_user.username or "", msg.from_user.full_name or "")
+    text = (
+        f"👋 <b>Добро пожаловать в VibeBoost, {escape(msg.from_user.first_name)}!</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "Автоматическое продвижение и накрутка во всех социальных сетях.\n\n"
+        "Выберите действие в меню:"
+    )
+    await msg.answer(text, reply_markup=main_menu_kb(), parse_mode="HTML")
 
 @dp.callback_query(F.data == "bot:menu")
-async def cb_main_menu(callback: types.CallbackQuery, state: FSMContext):
+async def cb_main_menu(call: types.CallbackQuery, state: FSMContext):
     await state.clear()
     text = (
-        f"👋 <b>Главное меню VibeBoost</b>\n"
+        "👋 <b>Главное меню VibeBoost</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        "Автоматическое продвижение и накрутка в топ для всех социальных сетей.\n\n"
-        "Выбери действие ниже:"
+        "Автоматическое продвижение и накрутка во всех социальных сетях.\n\n"
+        "Выберите действие в меню:"
     )
     try:
-        await callback.message.edit_text(text, reply_markup=main_menu_kb(), parse_mode="HTML")
+        await call.message.edit_text(text, reply_markup=main_menu_kb(), parse_mode="HTML")
     except Exception:
-        await callback.message.answer(text, reply_markup=main_menu_kb(), parse_mode="HTML")
-    await callback.answer()
-
+        await call.message.answer(text, reply_markup=main_menu_kb(), parse_mode="HTML")
+    await call.answer()
 
 @dp.message(Command("profile", "профиль", "баланс"))
-async def cmd_profile(message: types.Message, state: FSMContext):
-    await state.clear()
-    await show_profile(message.chat.id, message.from_user)
-
-
 @dp.callback_query(F.data == "bot:profile")
-async def cb_profile(callback: types.CallbackQuery, state: FSMContext):
+async def show_profile(event: types.Message | types.CallbackQuery, state: FSMContext):
     await state.clear()
-    await show_profile(callback.message.chat.id, callback.from_user, message_to_edit=callback.message)
-    await callback.answer()
+    u = event.from_user
+    user_data = await get_user(u.id, u.username or "", u.full_name or "")
+    bal = user_data["balance"]
+    uname = f"@{u.username}" if u.username else "не указан"
 
-
-async def show_profile(chat_id: int, user: types.User, message_to_edit: types.Message | None = None):
-    try:
-        prof = await sheets("get_user", user_id=user.id, username=user.username or "", full_name=user.full_name or "")
-        balance = float(prof.get("balance", 0))
-    except Exception:
-        balance = 0.0
-
-    username = f"@{user.username}" if user.username else "не указан"
     text = (
         "👤 <b>Ваш личный профиль VibeBoost</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        f"🔹 <b>Имя:</b> {escape(user.full_name)}\n"
-        f"🔹 <b>Username:</b> {escape(username)}\n"
-        f"🆔 <b>Telegram ID:</b> <code>{user.id}</code>\n\n"
-        f"💳 <b>Текущий баланс:</b> <b>{format_money(balance)}</b>\n"
+        f"🔹 <b>Имя:</b> {escape(u.full_name)}\n"
+        f"🔹 <b>Username:</b> {escape(uname)}\n"
+        f"🆔 <b>Telegram ID:</b> <code>{u.id}</code>\n\n"
+        f"💳 <b>Текущий баланс:</b> <b>{format_money(bal)}</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        "<i>Пополняйте баланс и запускайте заказы в 1 клик!</i>"
+        "<i>Пополняйте баланс и запускайте заказы моментально!</i>"
     )
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [
@@ -480,613 +392,380 @@ async def show_profile(chat_id: int, user: types.User, message_to_edit: types.Me
             make_btn("Поддержка", callback_data="bot:support", emoji_id=MENU_EMOJI_IDS.get("support")),
             make_btn("Обновить", callback_data="bot:profile"),
         ],
-        [
-            make_btn("Меню", callback_data="bot:menu", emoji_id=MENU_EMOJI_IDS.get("menu")),
-        ]
+        [make_btn("Меню", callback_data="bot:menu", emoji_id=MENU_EMOJI_IDS.get("menu"))]
     ])
-    if message_to_edit:
+
+    if isinstance(event, types.CallbackQuery):
         try:
-            await message_to_edit.edit_text(text, reply_markup=kb, parse_mode="HTML")
-            return
+            await event.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
         except Exception:
             pass
-    await bot.send_message(chat_id, text, reply_markup=kb, parse_mode="HTML")
+        await event.answer()
+    else:
+        await event.answer(text, reply_markup=kb, parse_mode="HTML")
 
-
-@dp.message(Command("catalog", "каталог", "услуги"))
-async def cmd_catalog(message: types.Message, state: FSMContext):
-    await state.clear()
-    await message.answer("🌐 <b>Выберите социальную сеть для продвижения:</b>", reply_markup=networks_kb(), parse_mode="HTML")
-
-
+@dp.message(Command("catalog", "каталог"))
 @dp.callback_query(F.data == "cat:home")
-async def cb_cat_home(callback: types.CallbackQuery, state: FSMContext):
+async def show_catalog(event: types.Message | types.CallbackQuery, state: FSMContext):
     await state.clear()
-    await callback.message.edit_text("🌐 <b>Выберите социальную сеть для продвижения:</b>", reply_markup=networks_kb(), parse_mode="HTML")
-    await callback.answer()
-
+    text = "🌐 <b>Выберите социальную сеть для продвижения:</b>"
+    if isinstance(event, types.CallbackQuery):
+        await event.message.edit_text(text, reply_markup=networks_kb(), parse_mode="HTML")
+        await event.answer()
+    else:
+        await event.answer(text, reply_markup=networks_kb(), parse_mode="HTML")
 
 @dp.callback_query(F.data.startswith("net:"))
-async def cb_choose_network(callback: types.CallbackQuery, state: FSMContext):
-    await state.clear()
-    idx = int(callback.data.split(":")[1])
-    net, items, pages, page, kb = services_by_network_kb(idx, 0)
+async def cb_net(call: types.CallbackQuery):
+    idx = int(call.data.split(":")[1])
+    net, items, pages, page, kb = services_by_net_kb(idx, 0)
     icon = tg_icon(net)
-    total_cnt = len(items)
     text = (
         f"{icon} <b>{escape(net)}</b> · Услуги продвижения\n"
-        f"Найдено услуг: <b>{total_cnt}</b> (стр. {page+1}/{pages})\n"
+        f"Найдено услуг: <b>{len(items)}</b> (стр. {page+1}/{pages})\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Выберите услугу из списка ниже:"
     )
-    await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
-    await callback.answer()
-
+    await call.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    await call.answer()
 
 @dp.callback_query(F.data.startswith("netpage:"))
-async def cb_network_page(callback: types.CallbackQuery):
-    parts = callback.data.split(":")
-    net_idx = int(parts[1])
-    page = int(parts[2])
-    net, items, pages, page, kb = services_by_network_kb(net_idx, page)
+async def cb_netpage(call: types.CallbackQuery):
+    _, idx, page = call.data.split(":")
+    net, items, pages, p, kb = services_by_net_kb(int(idx), int(page))
     icon = tg_icon(net)
-    total_cnt = len(items)
     text = (
         f"{icon} <b>{escape(net)}</b> · Услуги продвижения\n"
-        f"Найдено услуг: <b>{total_cnt}</b> (стр. {page+1}/{pages})\n"
+        f"Найдено услуг: <b>{len(items)}</b> (стр. {p+1}/{pages})\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Выберите услугу из списка ниже:"
     )
-    await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
-    await callback.answer()
-
+    await call.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    await call.answer()
 
 @dp.callback_query(F.data == "cat:noop")
-async def cb_noop(callback: types.CallbackQuery):
-    await callback.answer()
-
+async def cb_noop(call: types.CallbackQuery):
+    await call.answer()
 
 @dp.callback_query(F.data.startswith("srv:"))
-async def cb_service_card(callback: types.CallbackQuery, state: FSMContext):
-    parts = callback.data.split(":")
-    srv_id = parts[1]
-    net_idx = parts[2] if len(parts) > 2 else "0"
-    page = parts[3] if len(parts) > 3 else "0"
-
-    item = get_service(srv_id)
+async def cb_srv(call: types.CallbackQuery):
+    _, sid, net_idx, page = call.data.split(":")
+    item = CATALOG_BY_ID.get(sid)
     if not item:
-        await callback.answer("Услуга не найдена", show_alert=True)
+        await call.answer("Услуга не найдена", show_alert=True)
         return
+
     net = str(item.get("network"))
-    icon = tg_icon(net)
-    price = format_unit_price(item.get("rate", 0))
     desc = str(item.get("description") or "Быстрое и качественное выполнение.")
-    if len(desc) > 800:
-        desc = desc[:800] + "…"
+    if len(desc) > 800: desc = desc[:800] + "…"
 
     text = (
-        f"{icon} <b>{escape(str(item.get('name')))}</b>\n"
+        f"{tg_icon(net)} <b>{escape(str(item.get('name')))}</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         f"🌐 <b>Площадка:</b> {escape(net)}\n"
         f"📁 <b>Категория:</b> {escape(str(item.get('category', '—')))}\n"
-        f"🔢 <b>ID услуги:</b> <code>{escape(srv_id)}</code>\n"
-        f"💎 <b>Цена за 1 шт:</b> <code>{price}</code>\n"
+        f"🔢 <b>ID:</b> <code>{escape(sid)}</code>\n"
+        f"💎 <b>Цена:</b> <code>{format_unit_price(item.get('rate', 0))}</code> за 1 шт.\n"
         f"📊 <b>Лимиты:</b> от <code>{item.get('min')}</code> до <code>{item.get('max')}</code> шт.\n\n"
-        f"<b>Описание услуги:</b>\n{escape(desc)}"
+        f"<b>Описание:</b>\n{escape(desc)}"
     )
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [make_btn("🚀 Заказать услугу", callback_data=f"order:{srv_id}")],
+        [make_btn("🚀 Заказать услугу", callback_data=f"order:{sid}")],
         [
             make_btn("« К списку услуг", callback_data=f"netpage:{net_idx}:{page}"),
             make_btn("Меню", callback_data="bot:menu", emoji_id=MENU_EMOJI_IDS.get("menu")),
         ]
     ])
-    await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
-    await callback.answer()
+    await call.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    await call.answer()
 
-
-# ==========================================
-# ПОШАГОВЫЙ МАСТЕР ЗАКАЗА (WIZARD)
-# ==========================================
-
+# =====================================================================
+# WIZARD ЗАКАЗА
+# =====================================================================
 @dp.callback_query(F.data.startswith("order:"))
-async def cb_start_order(callback: types.CallbackQuery, state: FSMContext):
-    srv_id = callback.data.split(":")[1]
-    item = get_service(srv_id)
+async def cb_order(call: types.CallbackQuery, state: FSMContext):
+    sid = call.data.split(":")[1]
+    item = CATALOG_BY_ID.get(sid)
     if not item:
-        await callback.answer("Услуга недоступна", show_alert=True)
+        await call.answer("Услуга недоступна", show_alert=True)
         return
-    await state.set_state(BotOrder.waiting_link)
-    await state.update_data(order_service_id=srv_id)
-    net = str(item.get("network"))
-    icon = tg_icon(net)
-    price = format_unit_price(item.get("rate", 0))
 
-    await callback.message.answer(
-        f"{icon} <b>Оформление заказа:</b> «{escape(str(item.get('name')))}»\n"
-        f"Цена за 1 шт: <code>{price}</code> | Лимиты: от <code>{item['min']}</code> до <code>{item['max']}</code>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "🔗 <b>Шаг 1:</b> Отправьте ссылку на пост, канал или страницу:\n\n"
-        "<i>Для отмены напишите /cancel</i>",
+    await state.set_state(BotOrder.waiting_link)
+    await state.update_data(sid=sid)
+    await call.message.answer(
+        f"🔗 <b>Оформление заказа:</b> «{escape(item.get('name'))}»\n"
+        f"Цена за 1 шт: <code>{format_unit_price(item.get('rate', 0))}</code>\n\n"
+        "Отправьте ссылку на пост, канал или страницу:\n"
+        "<i>(Отмена — /cancel)</i>",
         parse_mode="HTML"
     )
-    await callback.answer()
-
+    await call.answer()
 
 @dp.message(Command("cancel"), StateFilter(BotOrder, BotTopup, BotSupport))
-async def cmd_cancel(message: types.Message, state: FSMContext):
+async def cmd_cancel(msg: types.Message, state: FSMContext):
     await state.clear()
-    await message.answer("❌ Действие отменено.", reply_markup=main_menu_kb())
-
+    await msg.answer("❌ Действие отменено.", reply_markup=main_menu_kb())
 
 @dp.message(BotOrder.waiting_link)
-async def process_link(message: types.Message, state: FSMContext):
-    link = (message.text or "").strip()
-    if not link or len(link) > 700:
-        await message.answer("⚠️ Пожалуйста, отправьте корректную ссылку:")
+async def step_link(msg: types.Message, state: FSMContext):
+    link = (msg.text or "").strip()
+    if not link:
+        await msg.answer("⚠️ Введите корректную ссылку:")
         return
+
     data = await state.get_data()
-    item = get_service(str(data.get("order_service_id")))
-    if not item:
-        await state.clear()
-        await message.answer("Услуга устарела. Откройте каталог /catalog заново.")
-        return
+    item = CATALOG_BY_ID.get(data["sid"])
+    await state.update_data(link=link)
 
-    await state.update_data(order_link=link)
-    srv_type = item.get("type", "Default")
-
-    if srv_type in ("Custom Comments", "Mentions"):
+    stype = item.get("type", "Default")
+    if stype in ("Custom Comments", "Mentions"):
         await state.set_state(BotOrder.waiting_comments)
-        await message.answer(
-            "💬 <b>Шаг 2 (Свои комментарии):</b>\n"
-            "Пришлите текст комментариев, <b>каждый с новой строки</b>.\n"
-            f"Количество строк должно быть от <code>{item['min']}</code> до <code>{item['max']}</code> шт.",
-            parse_mode="HTML"
-        )
+        await msg.answer(f"💬 Пришлите комментарии (каждый с новой строки, от {item['min']} до {item['max']} шт.):")
         return
-
-    if srv_type == "Poll":
+    if stype == "Poll":
         await state.set_state(BotOrder.waiting_poll_answer)
-        await message.answer(
-            "🎯 <b>Шаг 2 (Опрос):</b>\n"
-            "Введите номер или ID варианта ответа в опросе (например: <code>1</code>):",
-            parse_mode="HTML"
-        )
+        await msg.answer("🎯 Введите номер или ID варианта ответа в опросе:")
         return
 
     await state.set_state(BotOrder.waiting_quantity)
-    await message.answer(
-        f"📊 <b>Шаг 2:</b> Введите количество (от <code>{item['min']}</code> до <code>{item['max']}</code>):",
-        parse_mode="HTML"
-    )
-
+    await msg.answer(f"📊 Введите количество (от {item['min']} до {item['max']} шт.):")
 
 @dp.message(BotOrder.waiting_comments)
-async def process_comments(message: types.Message, state: FSMContext):
-    lines = [x.strip() for x in (message.text or "").splitlines() if x.strip()]
+async def step_comments(msg: types.Message, state: FSMContext):
+    lines = [x.strip() for x in (msg.text or "").splitlines() if x.strip()]
     data = await state.get_data()
-    item = get_service(str(data.get("order_service_id")))
-    if not item:
-        await state.clear()
-        await message.answer("Услуга недоступна.")
+    item = CATALOG_BY_ID.get(data["sid"])
+    if not (int(item["min"]) <= len(lines) <= int(item["max"])):
+        await msg.answer(f"⚠️ Нужно от {item['min']} до {item['max']} строк. Попробуйте еще раз:")
         return
-
-    min_q, max_q = int(item["min"]), int(item["max"])
-    if not min_q <= len(lines) <= max_q:
-        await message.answer(
-            f"⚠️ Вы прислали <code>{len(lines)}</code> строк.\n"
-            f"Требуется от <code>{min_q}</code> до <code>{max_q}</code> комментариев.\n"
-            "Пришлите комментарии повторно:",
-            parse_mode="HTML"
-        )
-        return
-
-    await state.update_data(order_comments="\n".join(lines), order_quantity=len(lines))
-    await show_order_confirm(message, state, item, len(lines))
-
+    await state.update_data(comments="\n".join(lines), qty=len(lines))
+    await show_confirm(msg, state, item, len(lines))
 
 @dp.message(BotOrder.waiting_poll_answer)
-async def process_poll_answer(message: types.Message, state: FSMContext):
-    ans = (message.text or "").strip()
+async def step_poll(msg: types.Message, state: FSMContext):
+    ans = (msg.text or "").strip()
+    await state.update_data(answer_number=ans)
     data = await state.get_data()
-    item = get_service(str(data.get("order_service_id")))
-    if not item:
-        await state.clear()
-        await message.answer("Услуга недоступна.")
-        return
-
-    await state.update_data(order_answer_number=ans)
+    item = CATALOG_BY_ID.get(data["sid"])
     await state.set_state(BotOrder.waiting_quantity)
-    await message.answer(f"📊 <b>Шаг 3:</b> Введите количество голосов (от <code>{item['min']}</code> до <code>{item['max']}</code>):", parse_mode="HTML")
-
+    await msg.answer(f"📊 Введите количество голосов (от {item['min']} до {item['max']}):")
 
 @dp.message(BotOrder.waiting_quantity)
-async def process_qty(message: types.Message, state: FSMContext):
-    raw = (message.text or "").strip()
+async def step_qty(msg: types.Message, state: FSMContext):
     try:
-        qty = int(raw)
+        qty = int((msg.text or "").strip())
     except ValueError:
-        await message.answer("⚠️ Введите число:")
+        await msg.answer("⚠️ Введите целое число:")
         return
-
     data = await state.get_data()
-    item = get_service(str(data.get("order_service_id")))
-    if not item:
-        await state.clear()
-        await message.answer("Услуга недоступна.")
+    item = CATALOG_BY_ID.get(data["sid"])
+    if not (int(item["min"]) <= qty <= int(item["max"])):
+        await msg.answer(f"⚠️ Количество должно быть от {item['min']} до {item['max']}:")
         return
+    await state.update_data(qty=qty)
+    await show_confirm(msg, state, item, qty)
 
-    min_q, max_q = int(item["min"]), int(item["max"])
-    if not min_q <= qty <= max_q:
-        await message.answer(f"⚠️ Количество должно быть от <code>{min_q}</code> до <code>{max_q}</code>:")
-        return
-
-    await state.update_data(order_quantity=qty)
-    await show_order_confirm(message, state, item, qty)
-
-
-async def show_order_confirm(message: types.Message, state: FSMContext, item: dict, qty: int):
-    data = await state.get_data()
+async def show_confirm(msg: types.Message, state: FSMContext, item: dict, qty: int):
     cost = order_cost(item["rate"], qty)
-    await state.update_data(order_cost=cost)
-
-    try:
-        prof = await sheets("get_user", user_id=message.from_user.id)
-        current_balance = float(prof.get("balance", 0))
-    except Exception:
-        current_balance = 0.0
-
-    net = str(item.get("network"))
-    icon = tg_icon(net)
+    await state.update_data(cost=cost)
+    udata = await get_user(msg.from_user.id)
+    bal = udata["balance"]
 
     text = (
-        "📋 <b>Проверьте данные вашего заказа:</b>\n"
+        "📋 <b>Подтверждение заказа</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        f"{icon} <b>Услуга:</b> {escape(str(item.get('name')))}\n"
-        f"🌐 <b>Площадка:</b> {escape(net)} · {escape(str(item.get('category', '—')))}\n"
-        f"🔗 <b>Ссылка:</b> <code>{escape(data.get('order_link', '—'))}</code>\n"
-        f"📊 <b>Количество:</b> <code>{qty} шт.</code>\n"
-    )
-    if data.get("order_comments"):
-        lines_cnt = len(str(data['order_comments']).splitlines())
-        text += f"💬 <b>Комментариев:</b> <code>{lines_cnt} шт.</code>\n"
-    if data.get("order_answer_number"):
-        text += f"🎯 <b>Номер ответа в опросе:</b> <code>{escape(str(data['order_answer_number']))}</code>\n"
-
-    text += (
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        f"💰 <b>К списанию:</b> <b>{format_money(cost)}</b>\n"
-        f"💳 <b>Ваш баланс:</b> {format_money(current_balance)}\n"
+        f"⚙️ <b>Услуга:</b> {escape(item.get('name'))}\n"
+        f"📊 <b>Количество:</b> {qty} шт.\n"
+        f"💰 <b>К оплате:</b> <b>{format_money(cost)}</b>\n"
+        f"💳 <b>Ваш баланс:</b> {format_money(bal)}\n"
     )
 
-    if current_balance < cost:
-        diff = cost - current_balance
-        text += f"\n⚠️ <b>Недостаточно средств!</b> Не хватает <b>{format_money(diff)}</b>."
+    if bal < cost:
+        text += f"\n⚠️ Недостаточно средств! Не хватает <b>{format_money(cost - bal)}</b>."
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [make_btn("Пополнить баланс", callback_data="bot:topup", emoji_id=MENU_EMOJI_IDS.get("topup"))],
-            [make_btn("Отменить заказ", callback_data="botorder:cancel")]
+            [make_btn("Отмена", callback_data="botorder:cancel")]
         ])
     else:
-        text += "\nВсе верно? Нажмите кнопку для запуска накрутки:"
+        text += "\nЗапустить накрутку?"
         kb = InlineKeyboardMarkup(inline_keyboard=[
-            [make_btn("Подтвердить и оплатить", callback_data="botorder:confirm")],
-            [make_btn("Отменить", callback_data="botorder:cancel")]
+            [make_btn("✅ Подтвердить и оплатить", callback_data="botorder:confirm")],
+            [make_btn("❌ Отмена", callback_data="botorder:cancel")]
         ])
 
     await state.set_state(BotOrder.confirming)
-    await message.answer(text, reply_markup=kb, parse_mode="HTML")
-
+    await msg.answer(text, reply_markup=kb, parse_mode="HTML")
 
 @dp.callback_query(F.data == "botorder:cancel", StateFilter(BotOrder.confirming))
-async def cb_order_cancel(callback: types.CallbackQuery, state: FSMContext):
+async def cb_cancel_order(call: types.CallbackQuery, state: FSMContext):
     await state.clear()
-    await callback.message.edit_text("❌ Заказ отменён.", reply_markup=main_menu_kb())
-    await callback.answer()
-
+    await call.message.edit_text("❌ Заказ отменён.", reply_markup=main_menu_kb())
+    await call.answer()
 
 @dp.callback_query(F.data == "botorder:confirm", StateFilter(BotOrder.confirming))
-async def cb_order_confirm(callback: types.CallbackQuery, state: FSMContext):
+async def cb_confirm_order(call: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    item = get_service(str(data.get("order_service_id")))
-    if not item:
-        await state.clear()
-        await callback.message.edit_text("⚠️ Услуга больше недоступна.")
-        await callback.answer()
-        return
-
-    user_id = callback.from_user.id
-    link = str(data.get("order_link"))
-    quantity = int(data.get("order_quantity", 0))
-    comments = data.get("order_comments")
-    answer_number = data.get("order_answer_number")
-
-    await callback.message.edit_text("⏳ <b>Создаём заказ у поставщика…</b>", parse_mode="HTML")
+    item = CATALOG_BY_ID.get(data["sid"])
+    await call.message.edit_text("⏳ <i>Оформляем заказ...</i>", parse_mode="HTML")
     await state.clear()
 
     try:
-        res = await execute_provider_order(user_id, item, link, quantity, comments, answer_number)
-        net = str(item.get("network"))
-        icon = tg_icon(net)
-        await callback.message.edit_text(
-            f"🎉 <b>Заказ #{escape(res['provider_id'])} успешно запущен!</b>\n"
+        oid, new_bal, cost = await execute_provider_order(
+            call.from_user.id, item, data["link"], data["qty"],
+            data.get("comments"), data.get("answer_number")
+        )
+        await call.message.edit_text(
+            f"🎉 <b>Заказ #{oid} запущен!</b>\n"
             "━━━━━━━━━━━━━━━━━━━━\n"
-            f"{icon} <b>Услуга:</b> {escape(str(item.get('name')))}\n"
-            f"📊 <b>Количество:</b> <code>{quantity} шт.</code>\n"
-            f"💰 <b>Списано:</b> <code>{format_money(res['charge'])}</code>\n"
-            f"💳 <b>Остаток на балансе:</b> <b>{format_money(res['new_balance'])}</b>",
+            f"⚙️ <b>Услуга:</b> {escape(item.get('name'))}\n"
+            f"💰 <b>Списано:</b> {format_money(cost)}\n"
+            f"💳 <b>Остаток:</b> {format_money(new_bal)}",
             reply_markup=main_menu_kb(),
             parse_mode="HTML"
         )
-    except Exception as exc:
-        await callback.message.edit_text(
-            f"❌ <b>Не удалось оформить заказ:</b> {escape(str(exc))}\n\n"
-            "Средства возвращены на ваш баланс.",
-            reply_markup=main_menu_kb(),
-            parse_mode="HTML"
-        )
-    finally:
-        await callback.answer()
+    except Exception as e:
+        await call.message.edit_text(f"❌ Ошибка: {e}", reply_markup=main_menu_kb())
+    await call.answer()
 
-
-# ==========================================
-# ПОПОЛНЕНИЕ БАЛАНСА
-# ==========================================
-
+# =====================================================================
+# ПОПОЛНЕНИЕ И ПОДДЕРЖКА
+# =====================================================================
 @dp.callback_query(F.data == "bot:topup")
-async def cb_topup_start(callback: types.CallbackQuery, state: FSMContext):
+async def cb_topup(call: types.CallbackQuery, state: FSMContext):
     await state.set_state(BotTopup.waiting_amount)
-    await callback.message.edit_text(
+    await call.message.edit_text(
         "💳 <b>Пополнение баланса</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        "Введите сумму пополнения в рублях (от 10 до 100 000 ₽):\n\n"
-        "<i>Для отмены напишите /cancel</i>",
+        "Введите сумму пополнения в рублях (от 10 до 100 000 ₽):\n"
+        "<i>(Отмена — /cancel)</i>",
         parse_mode="HTML"
     )
-    await callback.answer()
-
+    await call.answer()
 
 @dp.message(BotTopup.waiting_amount)
-async def process_topup_amount(message: types.Message, state: FSMContext):
-    raw = (message.text or "").strip().replace(",", ".")
+async def process_topup(msg: types.Message, state: FSMContext):
     try:
-        amt = round(float(raw), 2)
-        if not 10 <= amt <= 100000:
-            raise ValueError
+        amt = round(float(msg.text.replace(",", ".").strip()), 2)
+        if not (10 <= amt <= 100000): raise ValueError
     except ValueError:
-        await message.answer("⚠️ Введите число от 10 до 100 000 ₽:")
+        await msg.answer("⚠️ Введите сумму от 10 до 100 000 ₽:")
         return
 
     await state.clear()
-    user = message.from_user
-    try:
-        await bot.send_message(
-            ADMIN_CHAT_ID,
-            f"💳 <b>Запрос на пополнение баланса</b>\n"
-            f"👤 От: {escape(user.full_name)} (@{escape(user.username or 'не указан')})\n"
-            f"🆔 ID: <code>{user.id}</code>\n"
-            f"💰 Сумма: <b>{format_money(amt)}</b>\n\n"
-            f"Зачислить: <code>/addbalance {user.id} {amt}</code>\n#id{user.id}",
-            parse_mode="HTML"
-        )
-    except Exception:
-        pass
-
-    await message.answer(
-        "✅ <b>Запрос отправлен администратору!</b>\n\n"
-        f"Сумма: <b>{format_money(amt)}</b>\n"
-        "Баланс будет пополнен сразу после подтверждения платежа.",
-        reply_markup=main_menu_kb(),
-        parse_mode="HTML"
-    )
-
-
-# ==========================================
-# ПОДДЕРЖКА
-# ==========================================
-
-@dp.callback_query(F.data == "bot:support")
-async def cb_support_start(callback: types.CallbackQuery, state: FSMContext):
-    await state.set_state(BotSupport.waiting_question)
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [make_btn("Отмена", callback_data="bot:menu", emoji_id=MENU_EMOJI_IDS.get("menu"))]
-    ])
-    await callback.message.edit_text(
-        "💬 <b>Служба поддержки VibeBoost</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "Пожалуйста, напишите ваш вопрос или опишите возникшую проблему одним сообщением.\n\n"
-        "<i>Для отмены нажмите кнопку ниже или отправьте /cancel</i>",
-        reply_markup=kb,
-        parse_mode="HTML"
-    )
-    await callback.answer()
-
-
-@dp.message(Command("support", "поддержка", "help"))
-async def cmd_support(message: types.Message, state: FSMContext):
-    await state.set_state(BotSupport.waiting_question)
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [make_btn("Отмена", callback_data="bot:menu", emoji_id=MENU_EMOJI_IDS.get("menu"))]
-    ])
-    await message.answer(
-        "💬 <b>Служба поддержки VibeBoost</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "Пожалуйста, напишите ваш вопрос или опишите возникшую проблему одним сообщением.\n\n"
-        "<i>Для отмены отправьте /cancel</i>",
-        reply_markup=kb,
-        parse_mode="HTML"
-    )
-
-
-@dp.message(BotSupport.waiting_question)
-async def process_support_question(message: types.Message, state: FSMContext):
-    text = (message.text or message.caption or "").strip()
-    if not text:
-        await message.answer("⚠️ Пожалуйста, напишите ваш вопрос текстом:")
-        return
-
-    await state.clear()
-    user = message.from_user
-
-    admin_msg = (
-        "🆘 <b>Новое обращение в поддержку!</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        f"👤 От: {escape(user.full_name)} (@{escape(user.username or 'не указан')})\n"
-        f"🆔 Telegram ID: <code>{user.id}</code>\n\n"
-        f"<b>Вопрос:</b>\n{escape(text)}\n\n"
-        f"Ответить: <code>/send {user.id} </code>\n#id{user.id}"
-    )
-
-    try:
-        await bot.send_message(ADMIN_CHAT_ID, admin_msg, parse_mode="HTML")
-        if message.content_type != types.ContentType.TEXT:
-            await bot.copy_message(ADMIN_CHAT_ID, message.chat.id, message.message_id)
-    except Exception as exc:
-        log.exception("Не удалось отправить вопрос в поддержку админу: %s", exc)
-
-    await message.answer(
-        "✅ <b>Ваш вопрос успешно передан в поддержку!</b>\n\n"
-        "Администратор свяжется с вами или ответит прямо в этом чате в ближайшее время.",
-        reply_markup=main_menu_kb(),
-        parse_mode="HTML"
-    )
-
-
-# ==========================================
-# АДМИН-КОМАНДЫ
-# ==========================================
-
-@dp.message(Command("addbalance"))
-async def cmd_addbalance(message: types.Message):
-    if message.from_user.id != ADMIN_CHAT_ID:
-        return
-    parts = (message.text or "").split(maxsplit=2)
-    if len(parts) != 3 or not parts[1].isdigit():
-        await message.reply("Формат: <code>/addbalance user_id сумма</code>", parse_mode="HTML")
-        return
-    try:
-        target_id = int(parts[1])
-        amt = round(float(parts[2].replace(",", ".")), 2)
-        res = await sheets("credit", user_id=target_id, amount=amt, comment="Пополнение администратором")
-        new_bal = float(res.get("balance", 0))
-        await message.reply(f"✅ Баланс <code>{target_id}</code> пополнен на <b>{format_money(amt)}</b>. Текущий баланс: <b>{format_money(new_bal)}</b>", parse_mode="HTML")
-        try:
-            await bot.send_message(target_id, f"💎 <b>Ваш баланс пополнен на {format_money(amt)}!</b>\nТекущий баланс: <b>{format_money(new_bal)}</b>", parse_mode="HTML")
-        except Exception:
-            pass
-    except Exception as exc:
-        await message.reply(f"Ошибка: {exc}")
-
-
-@dp.message(Command("send"))
-async def cmd_send(message: types.Message):
-    if message.from_user.id != ADMIN_CHAT_ID:
-        return
-    parts = (message.text or "").split(maxsplit=2)
-    if len(parts) < 3 or not parts[1].isdigit():
-        await message.reply("Формат: <code>/send user_id текст</code>", parse_mode="HTML")
-        return
-    try:
-        await bot.send_message(int(parts[1]), parts[2], parse_mode="HTML")
-        await message.reply("✅ Доставлено.")
-    except Exception as exc:
-        await message.reply(f"Ошибка: {exc}")
-
-
-@dp.message(Command("reload"))
-async def cmd_reload_catalog(message: types.Message):
-    if message.from_user.id != ADMIN_CHAT_ID:
-        return
-    init_catalog_cache()
-    await message.reply(f"🔄 Каталог обновлен в памяти: {len(CATALOG_BY_ID)} услуг, {len(NETWORKS_LIST)} соцсетей.")
-
-
-@dp.message(F.chat.type == "private")
-async def forward_to_admin(message: types.Message):
-    if message.from_user.id == ADMIN_CHAT_ID:
-        return
-    user = message.from_user
-    text = message.text or message.caption or "(без текста)"
+    u = msg.from_user
     admin_text = (
-        f"📩 <b>Сообщение от пользователя</b>\n"
-        f"👤 {escape(user.full_name)} (@{escape(user.username or 'не указан')})\n"
-        f"🆔 ID: <code>{user.id}</code>\n\n"
-        f"{escape(text)}\n\n"
-        f"Ответить: <code>/send {user.id} </code>\n"
-        f"Пополнить: <code>/addbalance {user.id} </code>\n#id{user.id}"
+        "💳 <b>Запрос на пополнение баланса!</b>\n"
+        f"👤 От: {escape(u.full_name)} (@{escape(u.username or '—')})\n"
+        f"🆔 ID: <code>{u.id}</code>\n"
+        f"💰 Сумма: <b>{format_money(amt)}</b>\n\n"
+        f"Зачислить: <code>/addbalance {u.id} {amt}</code>\n#id{u.id}"
     )
     try:
         await bot.send_message(ADMIN_CHAT_ID, admin_text, parse_mode="HTML")
-        if message.content_type != types.ContentType.TEXT:
-            await bot.copy_message(ADMIN_CHAT_ID, message.chat.id, message.message_id)
     except Exception:
         pass
 
+    await msg.answer(
+        f"✅ <b>Запрос на {format_money(amt)} отправлен администратору!</b>\n"
+        "Баланс обновится сразу после подтверждения платежа.",
+        reply_markup=main_menu_kb(),
+        parse_mode="HTML"
+    )
 
-# ==========================================
-# REST API ДЛЯ MINI APP
-# ==========================================
+@dp.callback_query(F.data == "bot:support")
+async def cb_support(call: types.CallbackQuery, state: FSMContext):
+    await state.set_state(BotSupport.waiting_question)
+    kb = InlineKeyboardMarkup(inline_keyboard=[[make_btn("Отмена", callback_data="bot:menu", emoji_id=MENU_EMOJI_IDS.get("menu"))]])
+    await call.message.edit_text(
+        "💬 <b>Служба поддержки VibeBoost</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "Напишите ваш вопрос или опишите проблему одним сообщением:\n"
+        "<i>(Отмена — /cancel)</i>",
+        reply_markup=kb,
+        parse_mode="HTML"
+    )
+    await call.answer()
 
-async def user_info(request):
-    if request.method == "OPTIONS":
-        return web.Response(status=204, headers=cors_headers())
+@dp.message(BotSupport.waiting_question)
+async def process_support(msg: types.Message, state: FSMContext):
+    txt = (msg.text or msg.caption or "").strip()
+    if not txt:
+        await msg.answer("⚠️ Напишите вопрос текстом:")
+        return
+    await state.clear()
+    u = msg.from_user
+    admin_msg = (
+        "🆘 <b>Новое обращение в поддержку!</b>\n"
+        f"👤 От: {escape(u.full_name)} (@{escape(u.username or '—')})\n"
+        f"🆔 ID: <code>{u.id}</code>\n\n"
+        f"<b>Вопрос:</b>\n{escape(txt)}\n\n"
+        f"Ответить: <code>/send {u.id} </code>\n#id{u.id}"
+    )
     try:
-        payload = await request.json()
-        u = validate_init_data(str(payload.get("initData", "")))
-        prof = await sheets("get_user", user_id=int(u["id"]), username=u.get("username", ""))
-        return web.json_response({
-            "ok": True,
-            "balance": float(prof.get("balance", 0)),
-            "user": {"id": u["id"], "first_name": u.get("first_name", ""), "username": u.get("username", "")}
-        }, headers=cors_headers())
-    except Exception as exc:
-        return web.json_response({"ok": False, "error": str(exc)}, status=400, headers=cors_headers())
+        await bot.send_message(ADMIN_CHAT_ID, admin_msg, parse_mode="HTML")
+    except Exception:
+        pass
+    await msg.answer("✅ <b>Ваш вопрос передан администратору!</b> Скоро вам ответят.", reply_markup=main_menu_kb(), parse_mode="HTML")
 
+# =====================================================================
+# АДМИН-КОМАНДЫ
+# =====================================================================
+@dp.message(Command("addbalance"))
+async def admin_addbalance(msg: types.Message):
+    if msg.from_user.id != ADMIN_CHAT_ID: return
+    parts = msg.text.split()
+    if len(parts) != 3 or not parts[1].isdigit():
+        await msg.reply("Формат: <code>/addbalance user_id сумма</code>", parse_mode="HTML")
+        return
+    tid, amt = int(parts[1]), round(float(parts[2].replace(",", ".")), 2)
+    ok, nbal = await update_balance(tid, amt, "Пополнение администратором")
+    if ok:
+        await msg.reply(f"✅ Баланс <code>{tid}</code> пополнен на <b>{format_money(amt)}</b>. Баланс: <b>{format_money(nbal)}</b>", parse_mode="HTML")
+        try:
+            await bot.send_message(tid, f"💎 <b>Ваш баланс пополнен на {format_money(amt)}!</b>\nТекущий баланс: <b>{format_money(nbal)}</b>", parse_mode="HTML")
+        except Exception: pass
+    else:
+        await msg.reply("❌ Пользователь не найден.")
 
-async def submit_order(request):
-    if request.method == "OPTIONS":
-        return web.Response(status=204, headers=cors_headers())
+@dp.message(Command("send"))
+async def admin_send(msg: types.Message):
+    if msg.from_user.id != ADMIN_CHAT_ID: return
+    parts = msg.text.split(maxsplit=2)
+    if len(parts) < 3 or not parts[1].isdigit():
+        await msg.reply("Формат: <code>/send user_id текст</code>", parse_mode="HTML")
+        return
     try:
-        payload = await request.json()
-        u = validate_init_data(str(payload.get("initData", "")))
-        o = payload.get("order") or {}
-        item = get_service(str(o.get("service", "")))
-        if not item:
-            raise ValueError("Услуга не найдена")
-        qty = int(o.get("quantity", 0))
-        link = str(o.get("link", "")).strip()
-        res = await execute_provider_order(int(u["id"]), item, link, qty, o.get("comments"), o.get("answer_number"))
-        return web.json_response({"ok": True, **res}, headers=cors_headers())
-    except Exception as exc:
-        return web.json_response({"ok": False, "error": str(exc)}, status=500, headers=cors_headers())
+        await bot.send_message(int(parts[1]), parts[2], parse_mode="HTML")
+        await msg.reply("✅ Доставлено.")
+    except Exception as e:
+        await msg.reply(f"Ошибка: {e}")
 
+@dp.message(Command("stats"))
+async def admin_stats(msg: types.Message):
+    if msg.from_user.id != ADMIN_CHAT_ID: return
+    cnt = await get_total_users_count()
+    await msg.reply(f"📊 Пользователей в базе данных: <b>{cnt}</b>", parse_mode="HTML")
 
-async def topup_request(request):
-    if request.method == "OPTIONS":
-        return web.Response(status=204, headers=cors_headers())
-    try:
-        payload = await request.json()
-        u = validate_init_data(str(payload.get("initData", "")))
-        amt = float(payload.get("amount", 0))
-        await bot.send_message(ADMIN_CHAT_ID, f"💳 Запрос пополнения: ID {u['id']} на {amt} ₽\n#id{u['id']}")
-        return web.json_response({"ok": True}, headers=cors_headers())
-    except Exception as exc:
-        return web.json_response({"ok": False, "error": str(exc)}, status=400, headers=cors_headers())
+@dp.message(Command("reload"))
+async def admin_reload(msg: types.Message):
+    if msg.from_user.id != ADMIN_CHAT_ID: return
+    init_catalog_cache()
+    await msg.reply(f"🔄 Каталог перезагружен в RAM: {len(CATALOG_BY_ID)} услуг.")
 
-
-# Фоновый запуск бота (не блокирует порт веб-сервера)
+# =====================================================================
+# ВЕБ-СЕРВЕР ДЛЯ RENDER + ФОНОВЫЙ ЗАПУСК БОТА
+# =====================================================================
 async def start_bot_polling():
-    # Пытаемся удалить вебхук, мягко обрабатывая TelegramRetryAfter
-    for attempt in range(3):
+    for _ in range(3):
         try:
             await bot.delete_webhook(drop_pending_updates=True)
-            log.info("Telegram webhook успешно очищен.")
+            log.info("Вебхук очищен.")
             break
         except TelegramRetryAfter as e:
-            wait_time = min(e.retry_after, 35)
-            log.warning("Telegram FloodWait на delete_webhook: ждём %d сек...", wait_time)
-            await asyncio.sleep(wait_time)
-        except Exception as e:
-            log.warning("delete_webhook пропущен: %s", e)
+            wait_t = min(e.retry_after, 35)
+            log.warning("Telegram FloodWait: ожидание %d сек...", wait_t)
+            await asyncio.sleep(wait_t)
+        except Exception:
             break
 
     while True:
@@ -1095,42 +774,30 @@ async def start_bot_polling():
             await dp.start_polling(bot)
             break
         except Exception as e:
-            log.error("Ошибка polling бота: %s, перезапуск через 5 сек...", e)
+            log.error("Сбой polling: %s, перезапуск через 5 сек...", e)
             await asyncio.sleep(5)
-
 
 async def on_startup(app):
     global http
     http = ClientSession(timeout=ClientTimeout(total=25))
-    # Бот стартует в фоновой задаче, чтобы aiohttp моментально открыл порт для Render
-    app["polling_task"] = asyncio.create_task(start_bot_polling())
-
+    await init_db()
+    # Запускаем бота в фоне, чтобы Render мгновенно увидел открытый порт
+    app["bot_task"] = asyncio.create_task(start_bot_polling())
 
 async def on_cleanup(app):
-    task = app.get("polling_task")
-    if task:
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
-    if http:
-        await http.close()
+    t = app.get("bot_task")
+    if t:
+        t.cancel()
+        try: await t
+        except asyncio.CancelledError: pass
+    if http: await http.close()
     await bot.session.close()
 
-
-server_app = web.Application()
-for route, handler in (
-    ("/api/user/info", user_info),
-    ("/api/order", submit_order),
-    ("/api/topup", topup_request),
-):
-    server_app.router.add_route("OPTIONS", route, handler)
-    server_app.router.add_post(route, handler)
-server_app.router.add_get("/", lambda r: web.json_response({"status": "live", "service": "VibeBoost"}))
-server_app.router.add_get("/health", lambda r: web.json_response({"ok": True}))
-server_app.on_startup.append(on_startup)
-server_app.on_cleanup.append(on_cleanup)
+app = web.Application()
+app.router.add_get("/", lambda r: web.json_response({"status": "live", "service": "VibeBoost Bot"}))
+app.router.add_get("/health", lambda r: web.json_response({"ok": True}))
+app.on_startup.append(on_startup)
+app.on_cleanup.append(on_cleanup)
 
 if __name__ == "__main__":
-    web.run_app(server_app, host="0.0.0.0", port=PORT)
+    web.run_app(app, host="0.0.0.0", port=PORT)
