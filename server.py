@@ -783,16 +783,14 @@ async def admin_reload(msg: types.Message):
 # ВЕБ-СЕРВЕР ДЛЯ RENDER + НАДЁЖНЫЙ ЗАПУСК БОТА
 # =====================================================================
 async def start_bot_polling():
-    # Даем 3 секунды старому процессу Render гарантированно закрыться
+    # 3 секунды задержки, чтобы предыдущий процесс Render гарантированно закрыл сессию
     await asyncio.sleep(3)
-    
     try:
         await bot.delete_webhook(drop_pending_updates=True)
         log.info("Вебхук очищен.")
     except Exception as e:
         log.warning("delete_webhook пропущен: %s", e)
 
-    # Вечный цикл поллинга: если соединение сбросится — бот переподключится сам
     while True:
         try:
             log.info("Запуск Telegram Polling...")
