@@ -13,7 +13,6 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
-from aiogram.exceptions import TelegramRetryAfter
 from aiogram.types import InlineKeyboardMarkup
 from aiogram.types import InlineKeyboardButton as _BaseInlineKeyboardButton
 
@@ -24,7 +23,6 @@ class InlineKeyboardButton(_BaseInlineKeyboardButton):
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 log = logging.getLogger("vibeboost")
 
-# Переменные берутся из настроек Render (Environment)
 BOT_TOKEN = os.environ["BOT_TOKEN"].strip()
 ADMIN_CHAT_ID = int(os.environ["ADMIN_CHAT_ID"])
 TWIBOOST_API_KEY = os.environ["TWIBOOST_API_KEY"].strip()
@@ -64,7 +62,11 @@ async def init_db():
         await db.commit()
     log.info("База данных SQLite инициализирована.")
 
-async def get_user(user_id: int, username: str = "", full_name: str = "") -> dict:
+async def get_or_create_user(user_id: int, username: str = "", full_name: str = "") -> tuple[dict, bool]:
+    """
+    Возвращает (user_dict, is_new_user).
+    Если пользователь новый — флаг is_new_user = True.
+    """
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)) as cursor:
@@ -76,14 +78,19 @@ async def get_user(user_id: int, username: str = "", full_name: str = "") -> dic
                         (username, full_name, user_id)
                     )
                     await db.commit()
-                return dict(row)
+                return dict(row), False
 
+        # Новый пользователь
         await db.execute(
             "INSERT INTO users (user_id, username, full_name, balance) VALUES (?, ?, ?, 0.0)",
             (user_id, username, full_name)
         )
         await db.commit()
-        return {"user_id": user_id, "username": username, "full_name": full_name, "balance": 0.0}
+        return {"user_id": user_id, "username": username, "full_name": full_name, "balance": 0.0}, True
+
+async def get_user(user_id: int) -> dict:
+    u, _ = await get_or_create_user(user_id)
+    return u
 
 async def update_balance(user_id: int, delta_amount: float, comment: str = "") -> tuple[bool, float]:
     async with aiosqlite.connect(DB_PATH) as db:
@@ -151,7 +158,6 @@ def init_catalog_cache():
 
 init_catalog_cache()
 
-# Иконки кнопок
 MENU_EMOJI_IDS = {
     "catalog": "5766994197705921104",
     "profile": "5879770735999717115",
@@ -340,9 +346,30 @@ async def execute_provider_order(user_id: int, item: dict, link: str, quantity: 
 @dp.message(Command("start"))
 async def cmd_start(msg: types.Message, state: FSMContext):
     await state.clear()
-    await get_user(msg.from_user.id, msg.from_user.username or "", msg.from_user.full_name or "")
+    u = msg.from_user
+    username_str = f"@{u.username}" if u.username else "не указан"
+    full_name_str = u.full_name or "Пользователь"
+
+    # Проверяем нового пользователя и сохраняем в SQLite
+    user_data, is_new = await get_or_create_user(u.id, u.username or "", full_name_str)
+
+    # Если пользователь новый — сразу уведомляем админа в личку
+    if is_new:
+        admin_alert = (
+            "👤 <b>Новый пользователь в боте!</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            f"🔹 Имя: <b>{escape(full_name_str)}</b>\n"
+            f"🔹 Username: {escape(username_str)}\n"
+            f"🆔 ID: <code>{u.id}</code>\n\n"
+            f"Баланс: <code>0.00 ₽</code>\n#new_user #id{u.id}"
+        )
+        try:
+            await bot.send_message(ADMIN_CHAT_ID, admin_alert, parse_mode="HTML")
+        except Exception:
+            pass
+
     text = (
-        f"👋 <b>Добро пожаловать в VibeBoost, {escape(msg.from_user.first_name)}!</b>\n"
+        f"👋 <b>Добро пожаловать в VibeBoost, {escape(u.first_name)}!</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Автоматическое продвижение и накрутка во всех социальных сетях.\n\n"
         "Выберите действие в меню:"
@@ -369,7 +396,7 @@ async def cb_main_menu(call: types.CallbackQuery, state: FSMContext):
 async def show_profile(event: types.Message | types.CallbackQuery, state: FSMContext):
     await state.clear()
     u = event.from_user
-    user_data = await get_user(u.id, u.username or "", u.full_name or "")
+    user_data, _ = await get_or_create_user(u.id, u.username or "", u.full_name or "")
     bal = user_data["balance"]
     uname = f"@{u.username}" if u.username else "не указан"
 
@@ -753,35 +780,24 @@ async def admin_reload(msg: types.Message):
     await msg.reply(f"🔄 Каталог перезагружен в RAM: {len(CATALOG_BY_ID)} услуг.")
 
 # =====================================================================
-# ВЕБ-СЕРВЕР ДЛЯ RENDER + ФОНОВЫЙ ЗАПУСК БОТА
+# ВЕБ-СЕРВЕР ДЛЯ RENDER + МОМЕНТАЛЬНЫЙ ЗАПУСК БОТА
 # =====================================================================
 async def start_bot_polling():
-    for _ in range(3):
-        try:
-            await bot.delete_webhook(drop_pending_updates=True)
-            log.info("Вебхук очищен.")
-            break
-        except TelegramRetryAfter as e:
-            wait_t = min(e.retry_after, 35)
-            log.warning("Telegram FloodWait: ожидание %d сек...", wait_t)
-            await asyncio.sleep(wait_t)
-        except Exception:
-            break
+    try:
+        # Пытаемся быстро удалить вебхук, но без ожидания если Telegram выдал FloodWait
+        await bot.delete_webhook(drop_pending_updates=True)
+        log.info("Вебхук очищен.")
+    except Exception as e:
+        log.warning("delete_webhook пропущен: %s", e)
 
-    while True:
-        try:
-            log.info("Запуск Telegram Polling...")
-            await dp.start_polling(bot)
-            break
-        except Exception as e:
-            log.error("Сбой polling: %s, перезапуск через 5 сек...", e)
-            await asyncio.sleep(5)
+    log.info("Запуск Telegram Polling...")
+    await dp.start_polling(bot)
 
 async def on_startup(app):
     global http
     http = ClientSession(timeout=ClientTimeout(total=25))
     await init_db()
-    # Запускаем бота в фоне, чтобы Render мгновенно увидел открытый порт
+    # Запуск поллинга сразу
     app["bot_task"] = asyncio.create_task(start_bot_polling())
 
 async def on_cleanup(app):
