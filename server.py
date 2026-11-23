@@ -344,9 +344,6 @@ def main_menu_kb():
         [
             make_btn("Пополнить баланс", callback_data="bot:topup", emoji_id=MENU_EMOJI_IDS.get("topup")),
             make_btn("Поддержка", callback_data="bot:support", emoji_id=MENU_EMOJI_IDS.get("support")),
-        ],
-        [
-            make_btn("Mini App", web_app=WebAppInfo(url=WEBAPP_ORIGIN)),
         ]
     ])
 
@@ -459,11 +456,14 @@ async def show_profile(chat_id: int, user: types.User, message_to_edit: types.Me
     try:
         prof = await sheets("get_user", user_id=user.id, username=user.username or "", full_name=user.full_name or "")
         balance = float(prof.get("balance", 0))
-    except Exception:
+    except Exception as exc:
+        log.warning("Ошибка получения баланса: %s", exc)
         balance = 0.0
 
     username = f"@{user.username}" if user.username else "не указан"
-    text = (
+
+    # Шаблон с кастомными премиум-эмодзи
+    text_custom = (
         '<tg-emoji id="5190564364872101511">👤</tg-emoji> <b>Ваш личный профиль</b>\n'
         "━━━━━━━━━━━━━━━━━━━━\n"
         f'<tg-emoji id="5192702953642830208">👤</tg-emoji> <b>Имя:</b> {escape(user.full_name)}\n'
@@ -473,6 +473,19 @@ async def show_profile(chat_id: int, user: types.User, message_to_edit: types.Me
         "━━━━━━━━━━━━━━━━━━━━\n"
         "<i>Пополняйте баланс и запускайте заказы в 1 клик!</i>"
     )
+
+    # Резервный шаблон на случай, если Telegram запретит боту теги <tg-emoji> без подписки Stars
+    text_fallback = (
+        "👤 <b>Ваш личный профиль</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"🔹 <b>Имя:</b> {escape(user.full_name)}\n"
+        f"💬 <b>Username:</b> {escape(username)}\n"
+        f"🆔 <b>Telegram ID:</b> <code>{user.id}</code>\n\n"
+        f"💳 <b>Текущий баланс:</b> <b>{format_money(balance)}</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "<i>Пополняйте баланс и запускайте заказы в 1 клик!</i>"
+    )
+
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [
             make_btn("Пополнить баланс", callback_data="bot:topup", emoji_id=MENU_EMOJI_IDS.get("topup")),
@@ -486,13 +499,23 @@ async def show_profile(chat_id: int, user: types.User, message_to_edit: types.Me
             make_btn("Меню", callback_data="bot:menu", emoji_id=MENU_EMOJI_IDS.get("menu")),
         ]
     ])
-    if message_to_edit:
+
+    for current_text in (text_custom, text_fallback):
         try:
-            await message_to_edit.edit_text(text, reply_markup=kb, parse_mode="HTML")
+            if message_to_edit:
+                await message_to_edit.edit_text(current_text, reply_markup=kb, parse_mode="HTML")
+            else:
+                await bot.send_message(chat_id, current_text, reply_markup=kb, parse_mode="HTML")
             return
-        except Exception:
-            pass
-    await bot.send_message(chat_id, text, reply_markup=kb, parse_mode="HTML")
+        except Exception as e:
+            log.warning("Не удалось отправить профиль с текущим форматом (%s), пробуем фоллбэк...", e)
+            if current_text == text_fallback and message_to_edit:
+                # Если редактирование не прошло, пробуем отправить новым сообщением
+                try:
+                    await bot.send_message(chat_id, text_fallback, reply_markup=kb, parse_mode="HTML")
+                    return
+                except Exception as final_exc:
+                    log.error("Критическая ошибка отправки профиля: %s", final_exc)
 
 
 @dp.message(Command("catalog", "каталог", "услуги"))
