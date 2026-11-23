@@ -780,33 +780,46 @@ async def admin_reload(msg: types.Message):
     await msg.reply(f"🔄 Каталог перезагружен в RAM: {len(CATALOG_BY_ID)} услуг.")
 
 # =====================================================================
-# ВЕБ-СЕРВЕР ДЛЯ RENDER + МОМЕНТАЛЬНЫЙ ЗАПУСК БОТА
+# ВЕБ-СЕРВЕР ДЛЯ RENDER + НАДЁЖНЫЙ ЗАПУСК БОТА
 # =====================================================================
 async def start_bot_polling():
+    # Даем 3 секунды старому процессу Render гарантированно закрыться
+    await asyncio.sleep(3)
+    
     try:
-        # Пытаемся быстро удалить вебхук, но без ожидания если Telegram выдал FloodWait
         await bot.delete_webhook(drop_pending_updates=True)
         log.info("Вебхук очищен.")
     except Exception as e:
         log.warning("delete_webhook пропущен: %s", e)
 
-    log.info("Запуск Telegram Polling...")
-    await dp.start_polling(bot)
+    # Вечный цикл поллинга: если соединение сбросится — бот переподключится сам
+    while True:
+        try:
+            log.info("Запуск Telegram Polling...")
+            await dp.start_polling(bot, handle_signals=False)
+        except asyncio.CancelledError:
+            log.info("Polling остановлен штатно.")
+            break
+        except Exception as e:
+            log.error("Сбой polling: %s. Перезапуск через 5 сек...", e, exc_info=True)
+            await asyncio.sleep(5)
 
 async def on_startup(app):
     global http
     http = ClientSession(timeout=ClientTimeout(total=25))
     await init_db()
-    # Запуск поллинга сразу
     app["bot_task"] = asyncio.create_task(start_bot_polling())
 
 async def on_cleanup(app):
     t = app.get("bot_task")
     if t:
         t.cancel()
-        try: await t
-        except asyncio.CancelledError: pass
-    if http: await http.close()
+        try:
+            await t
+        except asyncio.CancelledError:
+            pass
+    if http:
+        await http.close()
     await bot.session.close()
 
 app = web.Application()
